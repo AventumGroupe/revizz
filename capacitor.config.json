@@ -1,0 +1,7 @@
+{
+  "appId": "fr.revizz.app",
+  "appName": "Révizz",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false },
+  "plugins": {}
+}
