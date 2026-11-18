@@ -1,6 +1,7 @@
 // Tout ce qui parle à l'API Claude est ici.
 import Anthropic from "@anthropic-ai/sdk";
 import { getSettings } from "./store.js";
+import * as demo from "./demo.js";
 
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 (le plus intelligent, recommandé)" },
@@ -150,7 +151,7 @@ const FLASHCARDS_SCHEMA = obj({ flashcards: arr(FLASHCARD, "Nouvelles flashcards
 /**
  * pages : [{ kind: "image", mediaType, data }] ou [{ kind: "pdf", data }] (base64 sans préfixe)
  */
-export async function analyserCours(pages, note, onProgress) {
+async function analyserCoursClaude(pages, note, onProgress) {
   const content = pages.map((p) =>
     p.kind === "pdf"
       ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } }
@@ -184,7 +185,7 @@ const NIVEAUX = {
   difficile: "difficiles : pièges classiques, application et raisonnement",
 };
 
-export async function genererQCM(fiche, niveau, nombre, dejaPosees, onProgress) {
+async function genererQCMClaude(fiche, niveau, nombre, dejaPosees, onProgress) {
   const deja = dejaPosees.length
     ? `\nNe repose pas ces questions déjà vues :\n${dejaPosees.slice(-40).map((q) => "- " + q).join("\n")}`
     : "";
@@ -215,7 +216,7 @@ export const TYPES_SUJET = {
   oral: "Préparation à l'oral",
 };
 
-export async function genererSujet(fiche, type, onProgress) {
+async function genererSujetClaude(fiche, type, onProgress) {
   return runJSON(
     {
       ...baseParams({ effort: "high", maxTokens: 32000 }),
@@ -231,7 +232,7 @@ export async function genererSujet(fiche, type, onProgress) {
   );
 }
 
-export async function corrigerCopie(fiche, sujet, reponse, onProgress) {
+async function corrigerCopieClaude(fiche, sujet, reponse, onProgress) {
   return run(
     {
       ...baseParams({ effort: "high", maxTokens: 16000 }),
@@ -246,7 +247,7 @@ export async function corrigerCopie(fiche, sujet, reponse, onProgress) {
   );
 }
 
-export async function plusDeFlashcards(fiche, existantes, onProgress) {
+async function plusDeFlashcardsClaude(fiche, existantes, onProgress) {
   const data = await runJSON(
     {
       ...baseParams({ effort: "low", maxTokens: 16000 }),
@@ -264,7 +265,7 @@ export async function plusDeFlashcards(fiche, existantes, onProgress) {
 }
 
 /** history : [{ role: "user" | "assistant", content: string }] */
-export async function discuter(fiche, history, onProgress) {
+async function discuterClaude(fiche, history, onProgress) {
   const messages = [
     {
       role: "user",
@@ -276,6 +277,16 @@ export async function discuter(fiche, history, onProgress) {
   return run({ ...baseParams({ effort: "low", maxTokens: 8000 }), messages }, onProgress);
 }
 
-export async function testerCle() {
+async function testerCleClaude() {
   return run({ ...baseParams({ effort: "low", maxTokens: 2000 }), messages: [{ role: "user", content: "Réponds juste : OK" }] });
 }
+
+// ---------- Aiguillage : mode démo (réponses préparées) ou vrai Claude ----------
+const choisir = (reel, factice) => (...args) => (getSettings().demo ? factice : reel)(...args);
+export const analyserCours = choisir(analyserCoursClaude, demo.analyserCours);
+export const genererQCM = choisir(genererQCMClaude, demo.genererQCM);
+export const genererSujet = choisir(genererSujetClaude, demo.genererSujet);
+export const corrigerCopie = choisir(corrigerCopieClaude, demo.corrigerCopie);
+export const plusDeFlashcards = choisir(plusDeFlashcardsClaude, demo.plusDeFlashcards);
+export const discuter = choisir(discuterClaude, demo.discuter);
+export const testerCle = choisir(testerCleClaude, demo.testerCle);

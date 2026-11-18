@@ -10,6 +10,12 @@ Application Android de révision : on prend en photo une fiche ou un cahier, et 
 
 Les fiches restent sur le téléphone. Les photos ne sont pas conservées : seul le texte est gardé.
 
+## Essayer sans clé : le mode démo
+
+Au premier lancement, « Essayer la démo, sans clé » charge une fiche d'histoire d'exemple avec des réponses préparées à l'avance. Toutes les fonctions marchent, sans appel à Claude. En démo, scanner n'importe quelle photo donne une fiche de maths d'exemple. Saisir une clé dans les Réglages quitte la démo et retire les fiches d'exemple.
+
+`npm run maquette` produit la même démo en une seule page web : `dist-maquette/revizz-maquette.html`.
+
 ## Installer l'APK sur le téléphone
 
 1. Ouvrir l'onglet **Releases** du dépôt GitHub (ou **Actions** → dernière exécution « Révizz » → *Revizz-apk*).
@@ -52,6 +58,7 @@ npm run android:apk    # compile l'APK (Android SDK requis), sortie : android/ap
 Structure :
 
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
+- `src/demo.js` : contenu et réponses du mode démo.
 - `src/store.js` : stockage local, répétition espacée (boîtes de Leitner), série de jours.
 - `src/main.js` : les écrans.
 - `android/` : projet Android natif (Capacitor).

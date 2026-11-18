@@ -3,6 +3,10 @@ import { marked } from "marked";
 import { Capacitor } from "@capacitor/core";
 import * as store from "./store.js";
 import * as ai from "./claude.js";
+import { ficheDeDepart } from "./demo.js";
+
+// Version « maquette » publiée en page web : uniquement le mode démo.
+const DEMO_ONLY = import.meta.env.VITE_DEMO_ONLY === "1";
 
 const app = document.getElementById("app");
 
@@ -28,6 +32,22 @@ const couleur = (matiere = "") => {
   for (const k in COULEURS) if (m.includes(k)) return COULEURS[k];
   return "#a29bfe";
 };
+// Fenêtre de confirmation intégrée (les fenêtres du navigateur ne marchent pas partout).
+function confirmer(message, libelleOk = "Supprimer") {
+  return new Promise((resolve) => {
+    const d = document.createElement("div");
+    d.className = "modal";
+    d.innerHTML = `<div class="modal-box" role="dialog" aria-modal="true"><p>${esc(message)}</p>
+      <div class="row"><button class="btn secondary" data-r="0">Annuler</button><button class="btn bad" data-r="1">${esc(libelleOk)}</button></div></div>`;
+    d.onclick = (e) => {
+      const r = e.target.closest("[data-r]");
+      if (!r && e.target !== d) return;
+      d.remove();
+      resolve(r?.dataset.r === "1");
+    };
+    document.body.appendChild(d);
+  });
+}
 function toast(msg) {
   const t = document.createElement("div");
   t.className = "toast";
@@ -53,14 +73,26 @@ if (Capacitor.isNativePlatform()) {
   );
 }
 
+function entrerDemo() {
+  store.saveSettings({ demo: true });
+  if (!store.getFiches().some((f) => f.demoKey)) store.saveFiche(nouvelleFiche(ficheDeDepart()));
+  go({ view: "home" });
+}
+function quitterDemo() {
+  store.saveSettings({ demo: false });
+  store.getFiches().filter((f) => f.demoKey).forEach((f) => store.deleteFiche(f.id));
+}
+
 function render() {
   const s = store.getSettings();
-  if (!s.apiKey && ui.view !== "settings") ui.view = "welcome";
+  if (DEMO_ONLY && !s.demo) return entrerDemo();
+  if (!s.apiKey && !s.demo && ui.view !== "settings") ui.view = "welcome";
   const views = { welcome, home, scan, fiche: ficheView, settings, revision };
   app.innerHTML = views[ui.view]();
   afterRender[ui.view]?.();
 }
 const afterRender = {};
+afterRender.welcome = () => (document.getElementById("btn-demo").onclick = entrerDemo);
 
 // ---------- Accueil (premier lancement) ----------
 function welcome() {
@@ -73,7 +105,10 @@ function welcome() {
       <li>🧠 Claude prépare ta fiche de révision</li>
       <li>🎯 Entraîne-toi jusqu'à tout savoir</li>
     </ol>
-    <button class="btn primary" data-go="settings">Commencer</button>
+    <div class="welcome-actions">
+      <button class="btn primary big-btn" data-go="settings">Commencer avec ma clé Claude</button>
+      <button class="btn secondary big-btn" id="btn-demo">👀 Essayer la démo, sans clé</button>
+    </div>
   </div>`;
 }
 
@@ -94,6 +129,7 @@ function home() {
     <button class="icon" data-go="settings" aria-label="Réglages">⚙️</button>
   </header>
 
+  ${s.demo ? `<div class="demo-banner"><span><b>Mode démo</b> · réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " En démo, n'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="btn secondary" data-go="settings">Utiliser ma clé</button>`}</div>` : ""}
   <section class="stats">
     <div class="stat"><b>🔥 ${stats.serie}</b><span>jour${stats.serie > 1 ? "s" : ""} de suite</span></div>
     <div class="stat"><b>📚 ${fiches.length}</b><span>fiche${fiches.length > 1 ? "s" : ""}</span></div>
@@ -229,6 +265,26 @@ function progressUI(el, label) {
     stop: () => timer && clearInterval(timer),
   };
 }
+function nouvelleFiche(r) {
+  return {
+    id: store.uid(),
+    cree: Date.now(),
+    demoKey: r.demoKey,
+    titre: r.titre,
+    matiere: r.matiere || "Autre",
+    chapitre: r.chapitre,
+    transcription: r.transcription,
+    resume: r.resume,
+    points_cles: r.points_cles,
+    vocabulaire: r.vocabulaire,
+    astuce: r.astuce_memo,
+    flashcards: r.flashcards.map(store.nouvelleCarte),
+    questionsVues: [],
+    qcm: [],
+    sujets: [],
+    chat: [],
+  };
+}
 async function analyser() {
   if (analyseEnCours) return;
   analyseEnCours = true;
@@ -237,23 +293,7 @@ async function analyser() {
   const p = progressUI(document.getElementById("progress"));
   try {
     const r = await ai.analyserCours(pages, scanNote, p.update);
-    const fiche = {
-      id: store.uid(),
-      cree: Date.now(),
-      titre: r.titre,
-      matiere: r.matiere || "Autre",
-      chapitre: r.chapitre,
-      transcription: r.transcription,
-      resume: r.resume,
-      points_cles: r.points_cles,
-      vocabulaire: r.vocabulaire,
-      astuce: r.astuce_memo,
-      flashcards: r.flashcards.map(store.nouvelleCarte),
-      questionsVues: [],
-      qcm: [],
-      sujets: [],
-      chat: [],
-    };
+    const fiche = nouvelleFiche(r);
     store.saveFiche(fiche);
     pages = [];
     scanNote = "";
@@ -292,8 +332,8 @@ function ficheView() {
 afterRender.fiche = () => {
   const f = store.getFiche(ui.ficheId);
   if (!f) return;
-  document.getElementById("btn-suppr").onclick = () => {
-    if (confirm(`Supprimer la fiche « ${f.titre} » ?`)) {
+  document.getElementById("btn-suppr").onclick = async () => {
+    if (await confirmer(`Supprimer la fiche « ${f.titre} » ?`)) {
       store.deleteFiche(f.id);
       go({ view: "home" });
     }
@@ -706,35 +746,46 @@ function settings() {
   <header class="top"><button class="icon" data-go="home">←</button><div class="title">Réglages</div><span></span></header>
   <label class="field">Ton prénom<input id="prenom" value="${esc(s.prenom)}" placeholder="ex : Lucas"></label>
   <label class="field">Ta classe<select id="classe">${CLASSES.map((c) => `<option ${c === s.classe ? "selected" : ""}>${c}</option>`).join("")}</select></label>
-  <div class="card parent">
+  ${
+    DEMO_ONLY
+      ? `<div class="card parent"><h3>👨‍👩‍👦 Espace parent</h3><p class="hint">Dans l'appli Android, c'est ici que tu colles la clé API Claude et que tu choisis le modèle. Cette maquette fonctionne uniquement en mode démo.</p></div>`
+      : `<div class="card parent">
     <h3>👨‍👩‍👦 Espace parent</h3>
     <label class="field">Clé API Claude
       <input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off">
     </label>
     <p class="hint">Crée une clé sur <b>platform.claude.com</b> → API Keys. Elle reste uniquement sur ce téléphone. Pense à fixer une limite de dépense mensuelle dans la console.</p>
     <label class="field">Modèle<select id="model">${ai.MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select></label>
-  </div>
+  </div>`
+  }
   <button class="btn primary big-btn" id="save">Enregistrer</button>
-  <button class="btn ghost big-btn" id="test">Tester la clé</button>
+  ${DEMO_ONLY ? "" : `<button class="btn ghost big-btn" id="test">Tester la clé</button>`}
+  ${s.demo && !DEMO_ONLY ? `<button class="btn ghost big-btn" id="quit-demo">Quitter la démo</button>` : ""}
   <div id="progress"></div>
   <p class="hint center">Révizz · tes fiches restent sur ce téléphone.</p>`;
 }
 afterRender.settings = () => {
   const $ = (id) => document.getElementById(id);
-  const save = () =>
-    store.saveSettings({
-      prenom: $("prenom").value.trim(),
-      classe: $("classe").value,
-      apiKey: $("apikey").value.trim(),
-      model: $("model").value,
-    });
+  const save = () => {
+    const reglages = { prenom: $("prenom").value.trim(), classe: $("classe").value };
+    if (!DEMO_ONLY) Object.assign(reglages, { apiKey: $("apikey").value.trim(), model: $("model").value });
+    store.saveSettings(reglages);
+  };
   $("save").onclick = () => {
     save();
-    if (!store.getSettings().apiKey) return toast("Il faut une clé API pour utiliser Révizz.");
+    const s = store.getSettings();
+    if (!s.apiKey && !s.demo) return toast("Il faut une clé API pour utiliser Révizz.");
+    if (s.apiKey && s.demo && !DEMO_ONLY) quitterDemo();
     toast("Enregistré ✅");
     go({ view: "home" });
   };
-  $("test").onclick = async (e) => {
+  if ($("quit-demo"))
+    $("quit-demo").onclick = async () => {
+      if (!(await confirmer("Quitter la démo ? Les fiches d'exemple seront supprimées.", "Quitter"))) return;
+      quitterDemo();
+      go({ view: store.getSettings().apiKey ? "home" : "welcome" });
+    };
+  if ($("test")) $("test").onclick = async (e) => {
     save();
     e.target.disabled = true;
     const p = progressUI($("progress"), "Je contacte Claude…");

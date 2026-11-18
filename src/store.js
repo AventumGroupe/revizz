@@ -3,24 +3,28 @@ const KEY_SETTINGS = "revizz.settings";
 const KEY_FICHES = "revizz.fiches";
 const KEY_STATS = "revizz.stats";
 
+// Copie en mémoire : l'appli fonctionne même si le stockage du navigateur est bloqué.
+const memoire = {};
 function read(key, fallback) {
   try {
-    const v = localStorage.getItem(key);
+    const v = localStorage.getItem(key) ?? memoire[key];
     return v ? JSON.parse(v) : fallback;
   } catch {
-    return fallback;
+    return memoire[key] ? JSON.parse(memoire[key]) : fallback;
   }
 }
 function write(key, value) {
+  memoire[key] = JSON.stringify(value);
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(key, memoire[key]);
   } catch (e) {
-    alert("Mémoire du téléphone pleine pour Révizz : supprime quelques anciennes fiches.");
-    throw e;
+    if (e?.name !== "QuotaExceededError") return; // stockage bloqué : on garde la copie en mémoire
+    console.warn("Révizz : impossible d'enregistrer", e);
+    throw new Error("Mémoire du téléphone pleine pour Révizz : supprime quelques anciennes fiches.");
   }
 }
 
-const DEFAULT_SETTINGS = { apiKey: "", prenom: "", classe: "3e", model: "claude-opus-5-5" };
+const DEFAULT_SETTINGS = { apiKey: "", prenom: "", classe: "3e", model: "claude-opus-5-5", demo: false };
 export const getSettings = () => ({ ...DEFAULT_SETTINGS, ...read(KEY_SETTINGS, {}) });
 export const saveSettings = (s) => write(KEY_SETTINGS, { ...getSettings(), ...s });
 
