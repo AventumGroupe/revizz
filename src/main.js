@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import * as store from "./store.js";
 import * as ai from "./claude.js";
 import { ficheDeDepart, questionsDepartDemo } from "./demo.js";
+import { ouvrirScanner } from "./scanner.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, emoji } from "./matieres.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
@@ -66,6 +67,9 @@ const go = (patch) => {
   window.scrollTo(0, 0);
 };
 function back() {
+  // Scanner ouvert : le bouton retour le ferme.
+  const scanner = document.querySelector(".scanner [data-a=fermer]");
+  if (scanner) return scanner.click();
   if (ui.view === "fiche" || ui.view === "scan" || ui.view === "revision") go({ view: ui.retour });
   else if (ui.view === "chapitre") go({ view: "matiere" });
   else if (ui.view === "test") go({ view: "chapitre" });
@@ -298,33 +302,58 @@ let scanNote = "";
 let scanMatiere = ""; // vide = détection automatique
 let analyseEnCours = false;
 function scan() {
+  const vide = !pages.length;
   return `
-  <header class="top"><button class="icon" data-back>←</button><div class="title">Nouvelle fiche</div><span></span></header>
-  <p class="hint">Prends une photo par page, bien à plat et bien éclairée. Tu peux ajouter plusieurs pages ou un PDF.</p>
-  <div class="pages">
-    ${pages
-      .map(
-        (p, i) => `<div class="page">${
-          p.kind === "pdf" ? `<div class="pdf">📄 PDF<br><small>${esc(p.name)}</small></div>` : `<img src="${p.preview}" alt="page ${i + 1}">`
-        }<button class="del" data-delpage="${i}">✕</button><span class="num">${i + 1}</span></div>`
-      )
-      .join("")}
-    <button class="page add" id="btn-photo">📸<br>Photo</button>
-    <button class="page add" id="btn-import">🖼️<br>Galerie / PDF</button>
-  </div>
+  <header class="top"><button class="icon" data-back>←</button><div class="title">${scanMatiere ? `<small>${emoji(scanMatiere)} ${esc(scanMatiere)}</small>` : ""}Nouvelle fiche</div><span></span></header>
+  ${
+    vide
+      ? `<p class="hint">Comment veux-tu scanner ton cours ?</p>
+        <div class="choix-scan">
+          <button class="choix" data-scanmode="une"><span class="em">📄</span><b>Une page</b><small>Une photo, et c'est prêt.</small></button>
+          <button class="choix" data-scanmode="plusieurs"><span class="em">📚</span><b>Plusieurs pages</b><small>Enchaîne les photos sans valider chaque page.</small></button>
+        </div>
+        <button class="btn ghost big-btn" id="btn-import">🖼️ Importer depuis la galerie ou un PDF</button>`
+      : `<p class="hint">${pages.length} page${pages.length > 1 ? "s" : ""}. Vérifie l'ordre avec les flèches, puis crée ta fiche.</p>
+        <div class="pages">
+          ${pages
+            .map(
+              (p, i) => `<div class="page">${
+                p.kind === "pdf" ? `<div class="pdf">📄 PDF<br><small>${esc(p.name)}</small></div>` : `<img src="${p.preview}" alt="page ${i + 1}">`
+              }<button class="del" data-delpage="${i}" aria-label="Retirer la page ${i + 1}">✕</button><span class="num">${i + 1}</span>
+              ${pages.length > 1 ? `<span class="moves">${i ? `<button data-move="${i}" data-dir="-1" aria-label="Avancer la page ${i + 1}">◀</button>` : ""}${i < pages.length - 1 ? `<button data-move="${i}" data-dir="1" aria-label="Reculer la page ${i + 1}">▶</button>` : ""}</span>` : ""}</div>`
+            )
+            .join("")}
+          <button class="page add" data-scanmode="plusieurs">📸<br>Ajouter des pages</button>
+          <button class="page add" id="btn-import">🖼️<br>Galerie / PDF</button>
+        </div>
+        <label class="field">Matière
+          <select id="scan-matiere">${optionsMatieres(scanMatiere, true)}</select>
+        </label>
+        <label class="field">Une précision pour Claude ? (facultatif)
+          <input id="note" placeholder="ex : chapitre 3, contrôle vendredi sur la partie 2" value="${esc(scanNote)}">
+        </label>
+        <button class="btn primary big-btn" id="btn-analyser" ${analyseEnCours ? "disabled" : ""}>✨ Créer ma fiche (${pages.length} page${pages.length > 1 ? "s" : ""})</button>
+        <div id="progress"></div>`
+  }
   <input type="file" id="file-import" accept="image/*,application/pdf" multiple hidden>
-  <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
-  <label class="field">Matière
-    <select id="scan-matiere">${optionsMatieres(scanMatiere, true)}</select>
-  </label>
-  <label class="field">Une précision pour Claude ? (facultatif)
-    <input id="note" placeholder="ex : chapitre 3, contrôle vendredi sur la partie 2" value="${esc(scanNote)}">
-  </label>
-  <button class="btn primary big-btn" id="btn-analyser" ${pages.length && !analyseEnCours ? "" : "disabled"}>✨ Créer ma fiche de révision</button>
-  <div id="progress"></div>`;
+  <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>`;
 }
 afterRender.scan = () => {
   const $ = (id) => document.getElementById(id);
+  document.querySelectorAll("[data-scanmode]").forEach((b) => (b.onclick = () => lancerScanner(b.dataset.scanmode === "plusieurs")));
+  document.querySelectorAll("[data-move]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const i = +b.dataset.move;
+        const j = i + +b.dataset.dir;
+        [pages[i], pages[j]] = [pages[j], pages[i]];
+        render();
+      })
+  );
+  $("btn-import").onclick = () => $("file-import").click();
+  $("file-import").onchange = (e) => ajouterFichiers(e.target.files);
+  $("file-camera").onchange = (e) => ajouterFichiers(e.target.files);
+  if (!pages.length) return;
   $("note").oninput = (e) => (scanNote = e.target.value);
   $("scan-matiere").onchange = (e) => {
     if (e.target.value !== "__nouvelle__") return (scanMatiere = e.target.value);
@@ -334,12 +363,24 @@ afterRender.scan = () => {
       render();
     });
   };
-  $("btn-import").onclick = () => $("file-import").click();
-  $("btn-photo").onclick = prendrePhoto;
-  $("file-import").onchange = (e) => ajouterFichiers(e.target.files);
-  $("file-camera").onchange = (e) => ajouterFichiers(e.target.files);
   $("btn-analyser").onclick = analyser;
 };
+// Scanner intégré (rafale sans validation) ; si la caméra intégrée est indisponible, appareil photo classique.
+async function lancerScanner(multi) {
+  const ok = await ouvrirScanner({
+    multi,
+    dejaPrises: pages.filter((p) => p.kind === "image").length,
+    onPage: async (dataUrl) => {
+      pages.push(await imagePage(dataUrl));
+    },
+    onRetirer: () => pages.pop(),
+    onFin: () => render(),
+  });
+  if (!ok) {
+    if (multi) toast("Caméra intégrée indisponible : prends tes pages une par une, ou importe-les depuis la galerie.");
+    prendrePhoto();
+  }
+}
 async function prendrePhoto() {
   if (!Capacitor.isNativePlatform()) return document.getElementById("file-camera").click();
   try {

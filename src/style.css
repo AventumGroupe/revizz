@@ -211,3 +211,38 @@ h3.chapitre { color: var(--muted); font-size: .85rem; text-transform: uppercase;
 .maitrise .bar { flex: 1; margin: 0; }
 .compare { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 1.05rem; margin: 10px 0; }
 .compare .aa-fleche { padding: 0; }
+
+/* Choix du mode de scan */
+.choix-scan { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+.choix { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 22px 12px; border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); border: 2px solid transparent; }
+.choix:focus-visible, .choix:hover { border-color: var(--primary); }
+.choix .em { font-size: 2.4rem; line-height: 1.1; }
+.choix b { font-size: 1.05rem; }
+.choix small { color: var(--muted); font-size: .82rem; }
+.page .moves { position: absolute; bottom: 4px; right: 4px; display: flex; gap: 4px; }
+.page .moves button { width: 28px; height: 28px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: .75rem; }
+
+/* Scanner plein écran (toujours sombre : on regarde la caméra) */
+.scanner { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; outline: none; }
+.scanner video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sc-cadre { position: absolute; inset: calc(env(safe-area-inset-top, 0px) + 128px) 7% calc(env(safe-area-inset-bottom, 0px) + 150px); border: 2px solid rgba(255,255,255,.75); border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.28); pointer-events: none; }
+.sc-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.sc-flash.go { animation: flash .25s ease-out; }
+@keyframes flash { from { opacity: .85; } to { opacity: 0; } }
+.sc-haut { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: calc(env(safe-area-inset-top, 0px) + 12px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); }
+.sc-btn, .sc-place { width: 44px; height: 44px; flex: none; }
+.sc-btn { border-radius: 50%; background: rgba(0,0,0,.5); color: #fff; font-size: 1.1rem; }
+.sc-mode { display: flex; background: rgba(0,0,0,.5); border-radius: 999px; padding: 3px; }
+.sc-mode button { color: #fff; padding: 8px 12px; border-radius: 999px; font-weight: 700; font-size: .85rem; white-space: nowrap; }
+.sc-mode button.on { background: #fff; color: #13203a; }
+.sc-aide { position: relative; text-align: center; margin: 10px 16px 0; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+.sc-bas { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 22px) max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+.sc-vignette { position: relative; width: 58px; height: 76px; border-radius: 10px; overflow: visible; border: 2px solid #fff; background: rgba(255,255,255,.15); }
+.sc-vignette img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+.sc-vignette.vide { visibility: hidden; }
+.sc-compte { position: absolute; top: -10px; right: -10px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; background: #2563eb; color: #fff; font-size: .8rem; display: grid; place-items: center; }
+.sc-annuler { position: absolute; bottom: -8px; left: 64px; width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; }
+.sc-declencheur { width: 78px; height: 78px; border-radius: 50%; border: 5px solid #fff; display: grid; place-items: center; }
+.sc-declencheur span { width: 60px; height: 60px; border-radius: 50%; background: #fff; transition: transform .1s; }
+.sc-declencheur:active span { transform: scale(.88); }
+.sc-fini { justify-self: end; margin-left: 10px; padding: 10px 14px; font-size: .9rem; border-radius: 999px; background: #2563eb; color: #fff; font-weight: 800; white-space: nowrap; }

@@ -2,6 +2,7 @@
 
 Application Android de révision : on prend en photo une fiche ou un cahier, et Claude prépare :
 
+- **📸 Scanner** : au départ, on choisit « Une page » ou « Plusieurs pages ». Le scanner intégré garde la caméra ouverte : chaque appui sur le déclencheur ajoute une page (flash, vibration, compteur), sans rien valider. Le bouton ↩︎ retire la dernière page, « Terminé » revient à la liste. L'ordre se corrige avec les flèches. Import depuis la galerie ou un PDF toujours possible.
 - **📝 Résumé** : une fiche de révision structurée, les points clés, le vocabulaire et une astuce mémo. Le texte scanné reste consultable.
 - **🃏 Flashcards** : répétition espacée. Les cartes ratées reviennent vite, les cartes sues de plus en plus tard. Une « Révision du jour » regroupe toutes les matières.
 - **✅ QCM** : 5, 10 ou 20 questions, en facile, moyen ou difficile. Chaque réponse est expliquée et l'appli garde l'historique des notes. Les nouveaux QCM évitent les questions déjà posées.
@@ -73,6 +74,7 @@ Structure :
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
 - `src/matieres.js` : catalogue des matières, « Mes matières » de l'élève, rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
+- `src/scanner.js` : scanner plein écran en rafale (caméra en direct).
 - `src/store.js` : stockage local, répétition espacée (boîtes de Leitner), série de jours.
 - `src/main.js` : les écrans.
 - `android/` : projet Android natif (Capacitor).
