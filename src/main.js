@@ -10,6 +10,7 @@ import * as sauvegarde from "./sauvegarde.js";
 import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
+import { preparerPage, changerType } from "./image.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
 const DEMO_ONLY = import.meta.env.VITE_DEMO_ONLY === "1";
@@ -122,7 +123,7 @@ function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
   if (!ai.estConfigure(s) && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, matieres, planning, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
+  const views = { welcome, home, matieres, planning, relecture: relectureView, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
   const avecNav = VUES_RACINE.includes(ui.view) && ui.view !== "welcome";
   document.body.classList.toggle("avec-nav", avecNav);
   app.innerHTML = views[ui.view]() + (avecNav ? barreNav() : "");
@@ -377,6 +378,7 @@ function matiereView() {
 let pages = [];
 let scanNote = "";
 let scanMatiere = ""; // vide = détection automatique
+let typeDoc = store.getSettings().typeDoc || "manuscrit"; // manuscrit (haute précision) ou imprime (économe)
 let analyseEnCours = false;
 function scan() {
   const vide = !pages.length;
@@ -385,12 +387,20 @@ function scan() {
   ${
     vide
       ? `<p class="hint">Comment veux-tu scanner ton cours ?</p>
+        <div class="type-doc"><span>Écriture</span><div class="seg" role="group" aria-label="Type de document">
+          <button data-type="manuscrit" class="${typeDoc === "manuscrit" ? "on" : ""}">Manuscrite</button>
+          <button data-type="imprime" class="${typeDoc === "imprime" ? "on" : ""}">Imprimée</button></div></div>
+        <p class="hint">${typeDoc === "manuscrit" ? "Lecture haute précision : photo en haute définition, Claude zoome sur les mots difficiles et signale ceux dont il n'est pas sûr." : "Lecture économe, pour un polycopié ou un manuel imprimé."}</p>
         <div class="choix-scan">
           <button class="choix" data-scanmode="une"><span class="em">${ic("page", 28)}</span><b>Une page</b><small>Une photo, et c'est prêt.</small></button>
           <button class="choix" data-scanmode="plusieurs"><span class="em">${ic("pages", 28)}</span><b>Plusieurs pages</b><small>Enchaîne les photos sans valider chaque page.</small></button>
         </div>
         <button class="btn ghost big-btn" id="btn-import">${ic("galerie")} Importer depuis la galerie ou un PDF</button>`
       : `<p class="hint">${pages.length} page${pages.length > 1 ? "s" : ""}. Vérifie l'ordre avec les flèches, puis crée ta fiche.</p>
+        <div class="type-doc"><span>Écriture</span><div class="seg" role="group" aria-label="Type de document">
+          <button data-type="manuscrit" class="${typeDoc === "manuscrit" ? "on" : ""}">Manuscrite</button>
+          <button data-type="imprime" class="${typeDoc === "imprime" ? "on" : ""}">Imprimée</button></div></div>
+        <p class="hint">${typeDoc === "manuscrit" ? "Lecture haute précision : photo en haute définition, Claude zoome sur les mots difficiles et signale ceux dont il n'est pas sûr." : "Lecture économe, pour un polycopié ou un manuel imprimé."}</p>
         <div class="pages">
           ${pages
             .map(
@@ -418,6 +428,16 @@ function scan() {
 afterRender.scan = () => {
   const $ = (id) => document.getElementById(id);
   document.querySelectorAll("[data-scanmode]").forEach((b) => (b.onclick = () => lancerScanner(b.dataset.scanmode === "plusieurs")));
+  document.querySelectorAll("[data-type]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        typeDoc = b.dataset.type;
+        store.saveSettings({ typeDoc });
+        // Les pages déjà prises sont reprises à la nouvelle définition (depuis la copie haute définition).
+        for (const [i, p] of pages.entries()) if (p.kind === "image") pages[i] = await changerType(p, typeDoc);
+        render();
+      })
+  );
   document.querySelectorAll("[data-move]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -448,7 +468,7 @@ async function lancerScanner(multi) {
     multi,
     dejaPrises: pages.filter((p) => p.kind === "image").length,
     onPage: async (dataUrl) => {
-      pages.push(await imagePage(dataUrl));
+      pages.push(await preparerPage(dataUrl, typeDoc));
     },
     onRetirer: () => pages.pop(),
     onFin: () => render(),
@@ -469,7 +489,7 @@ async function prendrePhoto() {
       width: 1280,
       correctOrientation: true,
     });
-    pages.push(await imagePage(photo.dataUrl));
+    pages.push(await preparerPage(photo.dataUrl, typeDoc));
     render();
   } catch (e) {
     if (!/cancel/i.test(e?.message || "")) toast("Impossible d'utiliser l'appareil photo : " + (e?.message || e));
@@ -485,7 +505,7 @@ async function ajouterFichiers(files) {
       const data = (await lireDataUrl(f)).split(",")[1];
       pages.push({ kind: "pdf", data, name: f.name });
     } else if (f.type.startsWith("image/")) {
-      pages.push(await imagePage(await lireDataUrl(f)));
+      pages.push(await preparerPage(await lireDataUrl(f), typeDoc));
     }
   }
   render();
@@ -497,24 +517,6 @@ const lireDataUrl = (file) =>
     r.onerror = rej;
     r.readAsDataURL(file);
   });
-// Réduit la photo (1280 px max) : environ 1 600 tokens par page au lieu de 2 400, l'écriture reste lisible.
-function imagePage(dataUrl) {
-  return new Promise((res, rej) => {
-    const img = new Image();
-    img.onload = () => {
-      const max = 1280;
-      const k = Math.min(1, max / Math.max(img.width, img.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * k);
-      c.height = Math.round(img.height * k);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      const out = c.toDataURL("image/jpeg", 0.8);
-      res({ kind: "image", mediaType: "image/jpeg", data: out.split(",")[1], preview: out });
-    };
-    img.onerror = () => rej(new Error("Image illisible"));
-    img.src = dataUrl;
-  });
-}
 function progressUI(el, label) {
   const msgs = ["Je lis ta fiche…", "Je repère les notions importantes…", "Je rédige ta fiche de révision…", "Je prépare les flashcards…", "Presque fini…"];
   el.innerHTML = `<div class="loading"><div class="spinner"></div><div class="lmsg">${label || msgs[0]}</div><div class="lsub"></div></div>`;
@@ -553,25 +555,118 @@ async function analyser() {
   analyseEnCours = true;
   const btn = document.getElementById("btn-analyser");
   btn.disabled = true;
-  const p = progressUI(document.getElementById("progress"));
+  const zone = document.getElementById("progress");
+  const p = progressUI(zone, typeDoc === "manuscrit" ? "Je déchiffre l'écriture…" : "Je lis ta fiche…");
+  const lsub = zone.querySelector(".lsub");
+  let zooms = 0;
   try {
-    const r = await ai.analyserCours(pages, scanNote, scanMatiere, p.update);
-    if (scanMatiere) r.matiere = scanMatiere;
-    const fiche = nouvelleFiche(r);
-    store.saveFiche(fiche);
-    pages = [];
-    scanNote = "";
-    scanMatiere = "";
-    go({ view: "fiche", ficheId: fiche.id, tab: "resume", ...(ui.retour === "matiere" ? { matiere: fiche.matiere } : {}) });
-    toast("Fiche créée");
+    const texte = await ai.transcrire(
+      pages,
+      { matiere: scanMatiere, note: scanNote, type: typeDoc },
+      (chars) => (lsub.textContent = `${zooms ? `${zooms} zoom${zooms > 1 ? "s" : ""} sur les passages difficiles · ` : ""}${Math.round(chars / 5)} mots lus`),
+      (n) => {
+        zooms = n;
+        zone.querySelector(".lmsg").textContent = "Je zoome sur les passages difficiles…";
+        lsub.textContent = `${n} zoom${n > 1 ? "s" : ""}`;
+      }
+    );
+    relecture = { texte, original: texte, pages: pages.filter((x) => x.kind === "image"), matiere: scanMatiere, note: scanNote, retour: ui.retour };
+    p.stop();
+    // Des passages incertains ? L'élève les vérifie avant de créer la fiche.
+    if (ai.passagesIncertains(texte).length) go({ view: "relecture" });
+    else await creerDepuisTexte(texte, zone);
   } catch (e) {
-    document.getElementById("progress").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    zone.innerHTML = `<div class="error">${esc(e.message)}</div>`;
     btn.disabled = false;
   } finally {
     p.stop();
     analyseEnCours = false;
   }
 }
+
+// Étape 2 : la fiche est rédigée à partir du texte (relu si besoin).
+async function creerDepuisTexte(texte, zone) {
+  const p = progressUI(zone, "Je prépare ta fiche de révision…");
+  try {
+    const r = await ai.creerFiche(texte, { matiere: relecture?.matiere, note: relecture?.note }, p.update);
+    r.transcription = texte;
+    if (relecture?.matiere) r.matiere = relecture.matiere;
+    const fiche = nouvelleFiche(r);
+    store.saveFiche(fiche);
+    const retour = relecture?.retour || ui.retour;
+    pages = [];
+    scanNote = "";
+    scanMatiere = "";
+    relecture = null;
+    go({ view: "fiche", ficheId: fiche.id, tab: "resume", retour, ...(retour === "matiere" ? { matiere: fiche.matiere } : {}) });
+    toast("Fiche créée");
+  } finally {
+    p.stop();
+  }
+}
+
+// ---------- Relecture des passages incertains ----------
+let relecture = null; // { texte, original, pages, matiere, note, retour }
+function relectureView() {
+  if (!relecture) {
+    ui.view = "scan";
+    return scan();
+  }
+  const items = ai.passagesIncertains(relecture.texte);
+  return `
+  <header class="top"><button class="icon" id="rl-retour" aria-label="Retour">${ic("retour", 22)}</button><div class="title">Vérifie la lecture</div><span class="icon-place"></span></header>
+  <p class="intro">${items.length ? `Claude n'est pas sûr de <b>${items.length} passage${items.length > 1 ? "s" : ""}</b>. Regarde ta feuille et corrige si besoin : la fiche sera plus juste.` : "Plus aucun passage incertain."}</p>
+  ${relecture.pages.length ? `<div class="vignettes">${relecture.pages.map((pg, i) => `<button class="vignette" data-voir="${i}" aria-label="Voir la page ${i + 1}"><img src="${pg.preview}" alt=""><span>${i + 1}</span></button>`).join("")}</div>` : ""}
+  <div class="liste-lignes incertains">${items
+    .map(
+      (it, i) => `<div class="incertain">
+        <p class="contexte">…${esc(it.avant)}<mark>${it.illisible ? "illisible" : esc(it.lecture)}</mark>${esc(it.apres)}…</p>
+        <input data-item="${i}" value="${esc(it.lecture)}" placeholder="${it.illisible ? "Écris ce qui est noté, ou laisse vide" : ""}" aria-label="Correction du passage ${i + 1}">
+      </div>`
+    )
+    .join("")}</div>
+  <details class="card"><summary>Voir et modifier tout le texte</summary><textarea id="rl-texte" rows="14">${esc(relecture.texte)}</textarea></details>
+  <button class="btn primary big-btn" id="rl-creer">Créer ma fiche</button>
+  <div id="progress"></div>`;
+}
+// Remplace chaque passage incertain par la correction saisie (vide = on garde [illisible]).
+function appliquerCorrections(texte, valeurs) {
+  const items = ai.passagesIncertains(texte);
+  let res = texte;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const v = (valeurs[i] ?? "").trim();
+    const remplace = v ? v : items[i].illisible ? "[illisible]" : items[i].lecture;
+    res = res.slice(0, items[i].debut) + remplace + res.slice(items[i].fin);
+  }
+  return res;
+}
+afterRender.relecture = () => {
+  if (!relecture) return;
+  const $ = (id) => document.getElementById(id);
+  $("rl-retour").onclick = async () => {
+    if (await confirmer("Abandonner cette lecture ? Il faudra relancer l'analyse.", "Abandonner")) {
+      relecture = null;
+      go({ view: "scan" });
+    }
+  };
+  document.querySelectorAll("[data-voir]").forEach(
+    (b) => (b.onclick = () => modale(`<img class="page-entiere" src="${relecture.pages[+b.dataset.voir].original}" alt="Page ${+b.dataset.voir + 1}"><button class="btn secondary big-btn" id="pv-fermer">Fermer</button>`, (box, fermer) => (box.querySelector("#pv-fermer").onclick = fermer)))
+  );
+  let texteModifie = false;
+  $("rl-texte").oninput = () => (texteModifie = true);
+  $("rl-creer").onclick = async (e) => {
+    e.target.disabled = true;
+    const valeurs = [...document.querySelectorAll("[data-item]")].map((i) => i.value);
+    const texte = texteModifie ? $("rl-texte").value : appliquerCorrections(relecture.texte, valeurs);
+    relecture.texte = texte;
+    try {
+      await creerDepuisTexte(texte, $("progress"));
+    } catch (err) {
+      $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      e.target.disabled = false;
+    }
+  };
+};
 
 // ---------- Fiche ----------
 const TABS = [
@@ -678,13 +773,38 @@ function tabResume(f) {
   }
   ${f.astuce ? `<div class="astuce">${ic("astuce", 18)} <span><b>Astuce mémo</b>  ${esc(f.astuce)}</div>` : ""}
   ${connexesHTML(f)}
-  <details class="card"><summary>Voir le texte du cours scanné</summary><div class="md">${md(f.transcription)}</div></details>
+  <details class="card"><summary>Texte du cours scanné${ai.passagesIncertains(f.transcription).length ? ` · ${ai.passagesIncertains(f.transcription).length} passage(s) à vérifier` : ""}</summary>
+    <div class="md">${surligner(md(f.transcription))}</div>
+    <button class="btn secondary big-btn" id="btn-corriger-texte">${ic("modifier", 18)} Corriger le texte</button>
+  </details>
   <div class="row">
     <button class="btn secondary" data-tab="cartes">${ic("cartes", 18)} Réviser les cartes</button>
     <button class="btn secondary" data-tab="qcm">${ic("qcm", 18)} Faire un QCM</button>
   </div>`;
 }
+// Les lectures incertaines restent visibles dans le texte scanné.
+const surligner = (html) => html.replace(/\[\?([^\]]*)\]/g, '<mark class="incertain">$1</mark>').replace(/\[illisible\]/g, '<mark class="incertain">illisible</mark>');
 function bindResume(f) {
+  const corr = document.getElementById("btn-corriger-texte");
+  if (corr)
+    corr.onclick = () =>
+      modale(
+        `<h3>Corriger le texte scanné</h3>
+        <p class="hint">Les QCM, les sujets et le prof utilisent ce texte : une correction ici les rend plus justes. Supprime les crochets [?…] une fois le mot vérifié.</p>
+        <textarea id="ct-texte" rows="16">${esc(f.transcription)}</textarea>
+        <div class="row"><button class="btn secondary" id="ct-annuler">Annuler</button><button class="btn primary" id="ct-ok">Enregistrer</button></div>`,
+        (box, fermer) => {
+          box.querySelector("#ct-annuler").onclick = fermer;
+          box.querySelector("#ct-ok").onclick = () => {
+            const fiche = store.getFiche(f.id);
+            fiche.transcription = box.querySelector("#ct-texte").value;
+            store.saveFiche(fiche);
+            fermer();
+            toast("Texte corrigé");
+            render();
+          };
+        }
+      );
   document.querySelectorAll("[data-connexe]").forEach((b) => (b.onclick = () => ouvrirConnexe(f, +b.dataset.connexe)));
   const btn = document.getElementById("btn-connexes");
   if (btn)

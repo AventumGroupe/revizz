@@ -359,6 +359,23 @@ details.card summary { font-weight: 650; color: var(--primary-ink); }
 .conso-grid b { display: block; font-size: 1.1rem; font-variant-numeric: tabular-nums; } .conso-grid span { font-size: .78rem; color: var(--muted); }
 
 @media (max-width: 360px) { .tabs button .ic { display: none; } }
+/* Lecture : type de document et relecture */
+.type-doc { display: flex; align-items: center; gap: 12px; margin: 6px 0 2px; }
+.type-doc > span { font-weight: 650; font-size: .9rem; }
+.type-doc .seg { flex: 1; margin: 0; }
+.intro { margin: 2px 0 12px; }
+.vignettes { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px 12px; padding: 0 16px 4px; scrollbar-width: none; }
+.vignette { position: relative; flex: 0 0 74px; height: 98px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--card); }
+.vignette img { width: 100%; height: 100%; object-fit: cover; }
+.vignette span { position: absolute; bottom: 4px; left: 5px; background: rgba(0,0,0,.6); color: #fff; border-radius: 6px; padding: 0 6px; font-size: .74rem; font-weight: 700; }
+.incertain { padding: 12px 14px; }
+.incertain + .incertain { border-top: 1px solid var(--line-2); }
+.contexte { font-size: .9rem; color: var(--muted); margin: 0 0 6px; overflow-wrap: anywhere; }
+mark, mark.incertain { background: var(--warn-soft); color: var(--warn); font-weight: 700; padding: 0 3px; border-radius: 4px; }
+.incertain input { margin-top: 0; }
+textarea { font-family: inherit; line-height: 1.5; resize: vertical; }
+.page-entiere { display: block; width: 100%; height: auto; border-radius: 10px; margin-bottom: 8px; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 /* Scanner plein écran (toujours sombre : on regarde la caméra) */
 .scanner { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; outline: none; }

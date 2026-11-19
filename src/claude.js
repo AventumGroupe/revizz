@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
 import { nomsPourClaude } from "./matieres.js";
+import { zoomer } from "./image.js";
 
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 (le plus intelligent, recommandé)" },
@@ -213,34 +214,180 @@ const CONNEXES_SCHEMA = obj({ connexes: arr(CONNEXE, CONNEXES_DESC) });
 
 // ---------- Fonctions utilisées par l'appli ----------
 
+// ---------- Lecture des pages (OCR exigeant, écriture manuscrite) ----------
+// Étape 1 : Claude ne fait que lire, avec un outil de zoom pour les passages difficiles.
+// Étape 2 : la fiche est rédigée à partir du texte, une fois relu par l'élève.
+
+const OUTIL_ZOOM = {
+  name: "zoom",
+  description:
+    "Agrandit une zone d'une page pour lire un mot ou une ligne difficile (petit, pâle, raturé, écriture serrée). " +
+    "Coordonnées en pixels de l'image de la page telle que tu la vois, origine en haut à gauche. " +
+    "Encadre large : une ligne entière ou un paragraphe plutôt qu'un seul mot.",
+  input_schema: {
+    type: "object",
+    properties: {
+      page: { type: "integer", description: "Numéro de la page, à partir de 1" },
+      x0: { type: "integer" }, y0: { type: "integer" }, x1: { type: "integer" }, y1: { type: "integer" },
+    },
+    required: ["page", "x0", "y0", "x1", "y1"],
+    additionalProperties: false,
+  },
+  strict: true,
+  eager_input_streaming: true,
+};
+const MAX_ZOOMS = 14;
+
+const CONSIGNES_LECTURE = `Tu es un expert de la lecture d'écritures manuscrites d'élèves (cahiers, fiches, copies), en français.
+Ta seule tâche : transcrire fidèlement et complètement les pages fournies. Ne résume pas, ne corrige pas le fond.
+
+Méthode :
+- Lis chaque page entièrement, dans l'ordre de lecture (colonnes, marges, bulles et annotations comprises). Commence chaque page par « ## Page n ».
+- Avant de conclure sur un passage petit, pâle, serré, raturé ou ambigu, utilise l'outil zoom pour l'agrandir. Pour une écriture difficile, n'hésite pas à zoomer ligne par ligne.
+- Déchiffre en croisant : la forme des lettres ailleurs sur la page (même main), le sens de la phrase, la matière et le niveau, le vocabulaire du programme.
+- Développe les abréviations de prise de notes courantes (qd → quand, pr → pour, ds → dans, tjrs → toujours, cad → c'est-à-dire, gvt → gouvernement), mais garde les sigles (DDHC, PIB, ADN).
+- Restitue la structure en Markdown : titres (##, ###), listes, flèches (→, ⇒), encadrés (> ), tableaux, mots soulignés en **gras**.
+- Formules et symboles en Unicode (x², √, π, ≤, →, H₂O), jamais en LaTeX. Décris brièvement les schémas : [Schéma : …].
+- Ignore ce qui est barré, les gribouillis et le texte d'une autre page visible en transparence.
+
+Honnêteté :
+- N'invente jamais. Si un mot reste incertain même après zoom, écris ta meilleure lecture ainsi : [?mot]. Si un passage est impossible à lire : [illisible].
+- Une date, un nombre, un nom propre ou une formule douteux doit être marqué [?…], car une erreur sur ces éléments fausserait les révisions.
+
+Réponds uniquement avec la transcription.`;
+
 /**
- * pages : [{ kind: "image", mediaType, data }] ou [{ kind: "pdf", data }] (base64 sans préfixe)
+ * pages : [{ kind: "image", mediaType, data, largeur, hauteur, original }] ou [{ kind: "pdf", data }]
+ * onZoom(n) : appelé à chaque zoom de Claude (pour l'affichage).
  */
-async function analyserCoursClaude(pages, note, matiere, onProgress) {
-  const content = pages.map((p) =>
-    p.kind === "pdf"
-      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } }
-      : { type: "image", source: { type: "base64", media_type: p.mediaType, data: p.data } }
-  );
+async function transcrireClaude(pages, { matiere, note, type } = {}, onProgress, onZoom) {
+  const content = [];
+  pages.forEach((p, i) => {
+    content.push({ type: "text", text: p.kind === "pdf" ? `Document PDF (pages suivantes)` : `Page ${i + 1} (${p.largeur} × ${p.hauteur} px)` });
+    content.push(
+      p.kind === "pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } }
+        : { type: "image", source: { type: "base64", media_type: p.mediaType, data: p.data } }
+    );
+  });
+  const { classe } = getSettings();
   content.push({
     type: "text",
     text: [
-      `Voici ${pages.length > 1 ? `les ${pages.length} pages` : "la page"} d'une fiche ou d'un cours (photo, parfois manuscrite).`,
-      "1. Transcris fidèlement le contenu (corrige seulement les fautes évidentes de lecture) ; si une partie est illisible, écris [illisible].",
-      "2. Rédige une fiche de révision synthétique : l'essentiel à apprendre, sans recopier la transcription.",
-      "3. Ajoute les points clés, le vocabulaire essentiel, une astuce mémo et des flashcards.",
-      "4. Propose des sujets connexes adaptés au niveau de l'élève : une notion à revoir avant, une pour approfondir, un lien avec une autre matière.",
-      REGLES_FLASHCARDS,
+      `Transcris ${pages.length > 1 ? `ces ${pages.length} pages` : "cette page"} (${type === "imprime" ? "document plutôt imprimé" : "prise de notes manuscrite"}).`,
+      `Niveau de l'élève : ${classe || "lycée"}.`,
       matiere ? `Matière : ${matiere}.` : "",
       note ? `Précision de l'élève : ${note}` : "",
-    ].join("\n"),
+    ].filter(Boolean).join("\n"),
   });
-  // Lecture de l'écriture manuscrite : on garde un effort moyen pour la fiabilité.
+  const messages = [{ role: "user", content }];
+  const params = {
+    ...baseParams({ effort: type === "imprime" ? "medium" : "high", maxTokens: 32000, system: CONSIGNES_LECTURE }),
+    tools: pages.some((p) => p.kind === "image") ? [OUTIL_ZOOM] : [],
+  };
+  let zooms = 0;
+  for (let tour = 0; tour < 8; tour++) {
+    let message;
+    try {
+      const stream = client().beta.messages.stream({ ...params, messages });
+      let chars = 0, acc = "";
+      stream.on("text", (delta) => {
+        chars += delta.length;
+        acc += delta;
+        onProgress?.(chars, acc);
+      });
+      message = await stream.finalMessage();
+      enregistrerConso(message.usage);
+    } catch (err) {
+      throw explainError(err);
+    }
+    if (message.stop_reason === "refusal") throw new Error("Claude a refusé de traiter ce contenu. Essaie avec une autre fiche.");
+    const appels = message.content.filter((b) => b.type === "tool_use");
+    if (message.stop_reason !== "tool_use" || !appels.length) {
+      checkStop(message);
+      return textOf(message).trim();
+    }
+    // Claude demande des zooms : on découpe les zones sur le téléphone et on les lui renvoie.
+    messages.push({ role: "assistant", content: message.content });
+    const resultats = [];
+    for (const appel of appels) {
+      const e = appel.input || {};
+      const page = pages[(e.page | 0) - 1];
+      const valide = page && page.kind === "image" && [e.x0, e.y0, e.x1, e.y1].every((v) => Number.isFinite(v));
+      if (!valide) {
+        resultats.push({ type: "tool_result", tool_use_id: appel.id, is_error: true, content: "Page ou coordonnées invalides." });
+        continue;
+      }
+      if (zooms >= MAX_ZOOMS) {
+        resultats.push({ type: "tool_result", tool_use_id: appel.id, is_error: true, content: "Nombre maximal de zooms atteint : termine la transcription avec [?…] pour les mots incertains." });
+        continue;
+      }
+      try {
+        const data = await zoomer(page, e);
+        zooms++;
+        onZoom?.(zooms);
+        resultats.push({
+          type: "tool_result",
+          tool_use_id: appel.id,
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data } },
+            { type: "text", text: `Zone agrandie de la page ${e.page}.` },
+          ],
+        });
+      } catch (err) {
+        resultats.push({ type: "tool_result", tool_use_id: appel.id, is_error: true, content: err.message });
+      }
+    }
+    messages.push({ role: "user", content: resultats });
+  }
+  throw new Error("La lecture a pris trop d'étapes. Réessaie avec moins de pages à la fois.");
+}
+
+// Étape 2 : fiche de révision à partir du texte relu (sans renvoyer les photos : moins de tokens).
+async function creerFicheClaude(transcription, { matiere, note } = {}, onProgress) {
+  const schema = analyseSchema();
+  delete schema.properties.transcription;
+  schema.required = schema.required.filter((k) => k !== "transcription");
   return runJSON(
-    { ...baseParams({ effort: "medium", maxTokens: 32000 }), messages: [{ role: "user", content }] },
-    analyseSchema(),
+    {
+      ...baseParams({ effort: "medium", maxTokens: 24000 }),
+      messages: [
+        {
+          role: "user",
+          content: [
+            `<transcription>\n${transcription}\n</transcription>`,
+            "Voici la transcription d'un cours (photo, souvent manuscrite). Les mots entre [?…] sont des lectures incertaines : vérifie-les par le sens et le programme, et n'en fais pas des flashcards s'ils restent douteux.",
+            "1. Rédige une fiche de révision synthétique : l'essentiel à apprendre, sans recopier la transcription.",
+            "2. Ajoute les points clés, le vocabulaire essentiel, une astuce mémo et des flashcards.",
+            "3. Propose des sujets connexes adaptés au niveau de l'élève : une notion à revoir avant, une pour approfondir, un lien avec une autre matière.",
+            REGLES_FLASHCARDS,
+            matiere ? `Matière : ${matiere}.` : "",
+            note ? `Précision de l'élève : ${note}` : "",
+          ].filter(Boolean).join("\n"),
+        },
+      ],
+    },
+    schema,
     onProgress
   );
+}
+
+/** Repère les passages incertains d'une transcription : [?mot] et [illisible]. */
+export function passagesIncertains(texte) {
+  const items = [];
+  const re = /\[\?([^\]]*)\]|\[illisible\]/g;
+  let m;
+  while ((m = re.exec(texte))) {
+    items.push({
+      debut: m.index,
+      fin: m.index + m[0].length,
+      illisible: !m[0].startsWith("[?"),
+      lecture: m[1] || "",
+      avant: texte.slice(Math.max(0, m.index - 50), m.index).replace(/\s+/g, " "),
+      apres: texte.slice(m.index + m[0].length, m.index + m[0].length + 50).replace(/\s+/g, " "),
+    });
+  }
+  return items;
 }
 
 const NIVEAUX = {
@@ -376,7 +523,8 @@ async function testerCleClaude() {
 
 // ---------- Aiguillage : mode démo (réponses préparées) ou vrai Claude ----------
 const choisir = (reel, factice) => (...args) => (getSettings().demo ? factice : reel)(...args);
-export const analyserCours = choisir(analyserCoursClaude, demo.analyserCours);
+export const transcrire = choisir(transcrireClaude, demo.transcrire);
+export const creerFiche = choisir(creerFicheClaude, demo.creerFiche);
 export const genererQCM = choisir(genererQCMClaude, demo.genererQCM);
 export const genererSujet = choisir(genererSujetClaude, demo.genererSujet);
 export const corrigerCopie = choisir(corrigerCopieClaude, demo.corrigerCopie);

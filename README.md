@@ -3,6 +3,7 @@
 Application de révision, sur Android (APK) et en version web : on prend en photo une fiche ou un cahier, et Claude prépare :
 
 - **📸 Scanner** : au départ, on choisit « Une page » ou « Plusieurs pages ». Le scanner intégré garde la caméra ouverte : chaque appui sur le déclencheur ajoute une page (flash, vibration, compteur), sans rien valider. Le bouton ↩︎ retire la dernière page, « Terminé » revient à la liste. L'ordre se corrige avec les flèches. Import depuis la galerie ou un PDF toujours possible.
+- **🔍 Lecture des cours manuscrits** : au scan, on choisit « Manuscrite » (par défaut) ou « Imprimée ». En manuscrit, la photo est nettoyée sur le téléphone (ombres et jaunissement effacés, crayon et encre pâle foncés, couleurs conservées) et envoyée en haute définition (2400 px). Claude fait une lecture dédiée, en réflexion poussée, avec un outil de zoom : il agrandit lui-même les mots petits, pâles ou raturés (découpés sur le téléphone dans une copie à 3200 px). Il n'invente rien : une lecture incertaine est marquée [?mot], un passage impossible [illisible]. L'élève vérifie ensuite seulement ces passages, avec la photo sous les yeux, avant la création de la fiche. Le texte scanné reste corrigeable depuis la fiche, et les QCM, sujets et réponses du prof utilisent la version corrigée.
 - **📝 Résumé** : une fiche de révision structurée, les points clés, le vocabulaire et une astuce mémo. Le texte scanné reste consultable.
 - **🃏 Flashcards** : répétition espacée. Les cartes ratées reviennent vite, les cartes sues de plus en plus tard. Une « Révision du jour » regroupe toutes les matières.
 - **✅ QCM** : 5, 10 ou 20 questions, en facile, moyen ou difficile. Chaque réponse est expliquée et l'appli garde l'historique des notes. Les nouveaux QCM évitent les questions déjà posées.
@@ -78,7 +79,7 @@ Le modèle se change dans les Réglages.
 
 ### Éco-conception
 
-- **Photos réduites à 1280 px** : environ 1 600 tokens par page au lieu de 2 400, l'écriture reste lisible.
+- **Photos imprimées à 1280 px** (environ 1 600 tokens par page) ; les cours manuscrits passent en 2400 px pour la précision, et la fiche est rédigée à partir du texte relu, sans renvoyer les photos.
 - **Cours mis en cache** : le texte du cours est placé dans une partie fixe de la requête. Les QCM, sujets, cartes et questions au prof le relisent depuis le cache pendant 5 minutes, à 10 % du prix.
 - **Pas de doublon** : seule la transcription sert de référence, la fiche résumé n'est plus renvoyée.
 - **Réflexion dosée** : effort faible pour les QCM, les cartes et le prof ; moyen pour la lecture des photos, les sujets et les corrections.
@@ -101,6 +102,7 @@ Structure :
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
 - `src/matieres.js` : catalogue des matières, « Mes matières » de l'élève, rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
+- `src/image.js` : nettoyage des photos, définition selon le type de document, zoom.
 - `src/icons.js` : icônes de l'interface.
 - `src/scanner.js` : scanner plein écran en rafale (caméra en direct).
 - `src/sauvegarde.js` : fichier de sauvegarde, reprise par fusion ou remplacement.

@@ -285,9 +285,21 @@ export function ficheDeDepart() {
   return HISTOIRE;
 }
 
-export async function analyserCours(_pages, _note, _matiere, onProgress) {
-  await simuler("x".repeat(9000), onProgress, 6000);
-  return MATHS;
+// Lecture simulée : quelques « zooms », puis un texte avec deux passages incertains pour montrer la relecture.
+export async function transcrire(_pages, _opts, onProgress, onZoom) {
+  for (let z = 1; z <= 3; z++) {
+    await wait(700);
+    onZoom?.(z);
+  }
+  const texte = MATHS.transcription
+    .replace("Si ABC est rectangle en A", "Si ABC est rectangle en [?A]")
+    .replace("**Exemple** :", "**Exemple** ([illisible]) :");
+  return simuler(texte, onProgress, 2500);
+}
+export async function creerFiche(_transcription, _opts, onProgress) {
+  await simuler("x".repeat(6000), onProgress, 3500);
+  const { transcription, ...reste } = MATHS;
+  return reste;
 }
 
 export async function genererQCM(fiche, niveau, nombre, dejaPosees, onProgress) {
