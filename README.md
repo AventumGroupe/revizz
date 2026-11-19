@@ -11,11 +11,15 @@ Application de révision, sur Android (APK) et en version web : on prend en phot
 
 - **🗂️ Mes matières** : l'appli démarre avec les matières de Seconde (Français, Mathématiques, Histoire-Géographie, EMC, SES, SVT, Physique-Chimie, SNT, Anglais, Espagnol, Italien). On en ajoute au fur et à mesure depuis un catalogue (Enseignement scientifique, Philosophie, HGGSP, NSI, HLP, LLCER…) ou en créant la sienne (nom, icône, couleur). Dans une matière, les fiches sont rangées par chapitre. Toucher le titre d'une fiche permet de changer sa matière, son chapitre ou son titre.
 - **🔗 Sujets connexes** : sur chaque fiche, « Pour aller plus loin » propose une notion à revoir avant, des notions pour approfondir et des liens avec d'autres matières. Ils sont produits dans la même demande que le scan (aucun appel en plus). Toucher un sujet ouvre son explication et, si besoin, une mini-fiche (un petit appel, gardé ensuite). L'appli signale aussi les fiches de l'élève qui traitent de la même chose.
-- **📅 J'ai un contrôle** : on indique la matière, la date et les chapitres. L'appli calcule un planning jour par jour (relire chaque fiche, puis un QCM par fiche, les cartes tous les jours, un sujet type contrôle la veille), avec un rappel chaque jour à 18 h sur le téléphone. Les tâches se cochent en les faisant ; après le contrôle, on note sa note. Aucun appel à Claude.
+- **📅 Planning des contrôles** (onglet Planning) : on choisit la matière, la date (calendrier intégré, avec raccourcis « Demain », « Dans 1 semaine »…) et les chapitres. L'appli calcule un planning jour par jour : relire chaque fiche, un QCM par jour, les cartes tous les jours, un sujet blanc à mi-parcours pour les longues préparations, et la veille un sujet blanc type contrôle, un QCM bilan difficile et la relecture des points clés. On peut ajouter (QCM, sujet blanc, relecture, cartes, test final du chapitre) ou retirer des tâches pour chaque jour, et changer la date ou les chapitres à tout moment. Rappel chaque jour vers 18 h sur le téléphone ; après le contrôle, on note sa note. Aucun appel à Claude.
 - **💾 Sauvegarde et synchronisation** : un fichier de sauvegarde (sans la clé ni le code famille) à envoyer sur Drive depuis le menu de partage, et à reprendre sur un autre appareil ou sur le site web, en fusionnant (la version la plus récente de chaque fiche est gardée) ou en remplaçant tout.
 - **📈 Progrès par chapitre** : au début d'un chapitre, un test de départ de 10 questions sur tout le chapitre mesure d'où l'on part. À la fin, le test final reprend les mêmes questions dans un autre ordre, sans nouvel appel à Claude. Deux grandes barres « Avant / Après » et une courbe (départ, QCM d'entraînement, test final, ligne de la moyenne) montrent les progrès.
 
 Les fiches restent sur l'appareil (et dans les sauvegardes). Les photos ne sont pas conservées : seul le texte est gardé.
+
+## Interface
+
+Navigation par onglets en bas de l'écran (Accueil, Matières, Scanner, Planning, Profil). Style sobre : cartes plates, listes groupées, une pastille de couleur et une icône au trait par matière (Lucide), police Plus Jakarta Sans intégrée à l'appli (fonctionne hors connexion), thème clair et sombre.
 
 ## Essayer sans clé : le mode démo
 
@@ -97,6 +101,7 @@ Structure :
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
 - `src/matieres.js` : catalogue des matières, « Mes matières » de l'élève, rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
+- `src/icons.js` : icônes de l'interface.
 - `src/scanner.js` : scanner plein écran en rafale (caméra en direct).
 - `src/sauvegarde.js` : fichier de sauvegarde, reprise par fusion ou remplacement.
 - `src/controles.js` : mode « J'ai un contrôle » (planning et rappels).

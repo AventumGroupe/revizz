@@ -1,3 +1,4 @@
+import "@fontsource-variable/plus-jakarta-sans";
 import "./style.css";
 import { marked } from "marked";
 import { Capacitor } from "@capacitor/core";
@@ -7,7 +8,8 @@ import { ficheDeDepart, questionsDepartDemo } from "./demo.js";
 import { ouvrirScanner } from "./scanner.js";
 import * as sauvegarde from "./sauvegarde.js";
 import * as ctrl from "./controles.js";
-import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, emoji } from "./matieres.js";
+import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
+import { ic } from "./icons.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
 const DEMO_ONLY = import.meta.env.VITE_DEMO_ONLY === "1";
@@ -76,7 +78,8 @@ function back() {
   else if (ui.view === "chapitre") go({ view: "matiere" });
   else if (ui.view === "controle") go({ view: ui.retourControle || "home" });
   else if (ui.view === "test") go({ view: "chapitre" });
-  else if (ui.view === "settings" || ui.view === "matiere") go({ view: "home", matiere: null });
+  else if (ui.view === "matiere") go({ view: "matieres" });
+  else if (ui.view === "settings" || ui.view === "matieres" || ui.view === "planning") go({ view: "home", matiere: null });
 }
 
 // Remet les anciennes fiches (matière en texte libre) dans la liste fixe des matières.
@@ -119,8 +122,10 @@ function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
   if (!ai.estConfigure(s) && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
-  app.innerHTML = views[ui.view]();
+  const views = { welcome, home, matieres, planning, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
+  const avecNav = VUES_RACINE.includes(ui.view) && ui.view !== "welcome";
+  document.body.classList.toggle("avec-nav", avecNav);
+  app.innerHTML = views[ui.view]() + (avecNav ? barreNav() : "");
   afterRender[ui.view]?.();
 }
 const afterRender = {};
@@ -130,62 +135,118 @@ afterRender.welcome = () => (document.getElementById("btn-demo").onclick = entre
 function welcome() {
   return `
   <div class="welcome">
-    <div class="logo">R<span>é</span>vizz</div>
-    <p class="big">Scanne tes fiches de cours.<br>Révise avec des résumés, des flashcards, des QCM et des sujets d'entraînement.</p>
-    <ol class="steps">
-      <li>📸 Prends en photo ta fiche ou ton cahier</li>
-      <li>🧠 Claude prépare ta fiche de révision</li>
-      <li>🎯 Entraîne-toi jusqu'à tout savoir</li>
-    </ol>
+    <div class="logo">Révizz</div>
+    <p class="big">Tes fiches de cours deviennent des résumés, des flashcards, des QCM et des sujets d'entraînement.</p>
+    <ul class="steps">
+      <li>${ic("camera", 20)}<span>Prends en photo ta fiche ou ton cahier</span></li>
+      <li>${ic("resume", 20)}<span>Claude prépare ta fiche de révision</span></li>
+      <li>${ic("progres", 20)}<span>Entraîne-toi et suis tes progrès</span></li>
+    </ul>
     <div class="welcome-actions">
       <button class="btn primary big-btn" data-go="settings">Me connecter avec le code famille</button>
-      <button class="btn secondary big-btn" id="btn-demo">👀 Essayer la démo, sans clé</button>
+      <button class="btn secondary big-btn" id="btn-demo">Essayer la démo, sans clé</button>
     </div>
   </div>`;
 }
 
+// ---------- Barre de navigation (en bas de l'écran) ----------
+const ONGLETS = [
+  ["home", "accueil", "Accueil"],
+  ["matieres", "matieres", "Matières"],
+  ["scan", "camera", "Scanner"],
+  ["planning", "planning", "Planning"],
+  ["settings", "profil", "Profil"],
+];
+const VUES_RACINE = ["home", "matieres", "planning", "settings"];
+function barreNav() {
+  return `<nav class="tabbar" aria-label="Navigation">${ONGLETS.map(([v, icone, libelle]) =>
+    v === "scan"
+      ? `<button class="tab-scan" data-scan="" aria-label="Scanner une fiche">${ic("camera", 24)}</button>`
+      : `<button class="${ui.view === v ? "on" : ""}" data-go="${v}" ${ui.view === v ? 'aria-current="page"' : ""}>${ic(icone, 22)}<span>${libelle}</span></button>`
+  ).join("")}</nav>`;
+}
+
 // ---------- Écran principal ----------
+const jourDuJour = () => new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 function home() {
   const s = store.getSettings();
   const fiches = store.getFiches();
   const stats = store.getStats();
   const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
-  const recentes = [...fiches].sort((a, b) => (b.vue || b.cree) - (a.vue || a.cree)).slice(0, 3);
+  const recentes = [...fiches].sort((a, b) => (b.vue || b.cree) - (a.vue || a.cree)).slice(0, 6);
+  const avecFiches = getMatieres().filter((m) => fiches.some((f) => f.matiere === m.nom));
   return `
-  <header class="top">
-    <div>
-      <div class="hello">Salut ${esc(s.prenom || "")} 👋</div>
-      <div class="sub">Prêt à réviser ?</div>
-    </div>
-    <button class="icon" data-go="settings" aria-label="Réglages">⚙️</button>
+  <header class="page-head">
+    <div><p class="eyebrow">${jourDuJour()}</p><h1>Bonjour${s.prenom ? ` ${esc(s.prenom)}` : ""}</h1></div>
+    <div class="serie" title="Jours de révision d'affilée">${ic("serie", 16)}<b>${stats.serie}</b></div>
   </header>
+  ${s.demo ? `<div class="bandeau"><span><b>Mode démo.</b> Réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " N'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="lien" data-go="settings">Me connecter</button>`}</div>` : ""}
 
-  ${s.demo ? `<div class="demo-banner"><span><b>Mode démo</b> · réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " En démo, n'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="btn secondary" data-go="settings">Me connecter</button>`}</div>` : ""}
-  <section class="stats">
-    <div class="stat"><b>🔥 ${stats.serie}</b><span>jour${stats.serie > 1 ? "s" : ""} de suite</span></div>
-    <div class="stat"><b>📚 ${fiches.length}</b><span>fiche${fiches.length > 1 ? "s" : ""}</span></div>
-    <div class="stat"><b>🃏 ${dues}</b><span>carte${dues > 1 ? "s" : ""} à revoir</span></div>
+  <section class="bloc">
+    <h2>Aujourd'hui</h2>
+    <div class="carte-jour">
+      ${
+        dues
+          ? `<button class="ligne" data-revision="">${pastilleIcone("cartes", "#2563eb")}<span class="ligne-txt"><b>Cartes à revoir</b><small>${dues} carte${dues > 1 ? "s" : ""} prête${dues > 1 ? "s" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
+          : `<div class="ligne">${pastilleIcone("fait", "#0f9d58")}<span class="ligne-txt"><b>Cartes à jour</b><small>Rien à revoir pour l'instant</small></span></div>`
+      }
+      ${controlesAccueil()}
+    </div>
   </section>
 
-  <button class="btn primary big-btn" data-scan="">📸 Scanner une fiche</button>
-  ${dues ? `<button class="btn secondary big-btn" data-revision="">🃏 Révision du jour (${dues} cartes)</button>` : ""}
-
-  ${controlesAccueil()}
   ${rappelSauvegarde(fiches)}
-  <h3>Mes matières</h3>
-  <div class="matieres">${grilleMatieres(fiches)}</div>
+
   ${
     fiches.length
-      ? `<h3>Vues récemment</h3>
-         <div class="list">${recentes.map((f) => carteFiche(f, true)).join("")}</div>`
-      : `<div class="empty">Aucune fiche pour l'instant.<br>Touche une matière ou scanne ton premier cours !</div>`
+      ? `<section class="bloc">
+          <div class="bloc-titre"><h2>Reprendre</h2></div>
+          <div class="defile">${recentes.map(carteReprise).join("")}</div>
+        </section>
+        <section class="bloc">
+          <div class="bloc-titre"><h2>Mes matières</h2><button class="lien" data-go="matieres">Tout voir</button></div>
+          <div class="liste-lignes">${avecFiches.slice(0, 5).map((m) => ligneMatiere(m, fiches)).join("")}</div>
+        </section>`
+      : `<section class="vide-etat">
+          <h2>Ta première fiche</h2>
+          <p>Prends en photo un cours ou une fiche : Révizz prépare le résumé, les cartes et les QCM.</p>
+          <button class="btn primary big-btn" data-scan="">${ic("camera", 20)} Scanner une fiche</button>
+        </section>`
   }`;
+}
+// Petite pastille ronde avec une icône d'interface (pas une matière).
+const pastilleIcone = (icone, couleurHex) => `<span class="pastille pastille-m" style="--c:${couleurHex}">${ic(icone, 18)}</span>`;
+
+function carteReprise(f) {
+  const m = store.maitrise(f);
+  return `<button class="reprise" data-open="${f.id}">
+    ${pastille(f.matiere, "m")}
+    <b>${esc(f.titre)}</b>
+    <small>${esc(f.matiere)}</small>
+    <span class="jauge"><i style="width:${m}%;background:${couleur(f.matiere)}"></i></span>
+  </button>`;
+}
+function ligneMatiere(m, fiches) {
+  const siennes = fiches.filter((f) => f.matiere === m.nom);
+  const dues = siennes.reduce((n, f) => n + store.cartesDues(f).length, 0);
+  return `<button class="ligne" data-matiere="${esc(m.nom)}">
+    ${pastille(m.nom, "m")}
+    <span class="ligne-txt"><b>${esc(m.nom)}</b><small>${siennes.length ? `${siennes.length} fiche${siennes.length > 1 ? "s" : ""}` : "Aucune fiche"}</small></span>
+    ${dues ? `<span class="badge">${dues}</span>` : ""}${ic("suite", 18, "chevron")}
+  </button>`;
 }
 function rappelSauvegarde(fiches) {
   if (DEMO_ONLY || store.getSettings().demo || fiches.length < 2) return "";
   const der = sauvegarde.derniereSauvegarde();
   if (der && Date.now() - der < 7 * 864e5) return "";
-  return `<div class="depart-banner"><span>💾 <b>${der ? `Dernière sauvegarde ${ilYa(der)}` : "Aucune sauvegarde"}</b> : mets tes fiches à l'abri sur Drive.</span><button class="btn secondary" data-go="settings">Sauvegarder</button></div>`;
+  return `<div class="bandeau">${ic("envoyer", 18)}<span><b>${der ? `Dernière sauvegarde ${ilYa(der)}` : "Aucune sauvegarde"}.</b> Mets tes fiches à l'abri sur Drive.</span><button class="lien" data-go="settings">Sauvegarder</button></div>`;
+}
+
+// ---------- Toutes les matières ----------
+function matieres() {
+  const fiches = store.getFiches();
+  return `
+  <header class="page-head"><div><p class="eyebrow">${fiches.length} fiche${fiches.length > 1 ? "s" : ""}</p><h1>Matières</h1></div></header>
+  <div class="grille-matieres">${grilleMatieres(fiches)}</div>`;
 }
 // Une tuile par matière de « Mes matières » (« Autre » seulement si elle a des fiches), puis « Ajouter ».
 function grilleMatieres(fiches) {
@@ -194,22 +255,22 @@ function grilleMatieres(fiches) {
     .map((m) => {
       const siennes = fiches.filter((f) => f.matiere === m.nom);
       const dues = siennes.reduce((n, f) => n + store.cartesDues(f).length, 0);
-      return `<button class="matiere-tile ${siennes.length ? "" : "vide"}" data-matiere="${esc(m.nom)}" style="--c:${m.couleur}">
-        <span class="em">${m.emoji}</span>
+      return `<button class="tuile ${siennes.length ? "" : "vide"}" data-matiere="${esc(m.nom)}">
+        ${pastille(m.nom, "l")}
         <b>${esc(m.nom)}</b>
         <small>${siennes.length ? `${siennes.length} fiche${siennes.length > 1 ? "s" : ""}${dues ? ` · ${dues} à revoir` : ""}` : "Aucune fiche"}</small>
       </button>`;
     });
-  tuiles.push(`<button class="matiere-tile ajout" data-ajout-matiere><span class="em">➕</span><b>Ajouter une matière</b></button>`);
+  tuiles.push(`<button class="tuile ajout" data-ajout-matiere>${ic("plus", 22)}<b>Ajouter une matière</b></button>`);
   return tuiles.join("");
 }
 
 // Options d'un menu de matières (avec « Nouvelle matière… » à la fin).
 function optionsMatieres(choisie, avecAuto = false) {
   return (
-    (avecAuto ? `<option value="">✨ Détecter automatiquement</option>` : "") +
-    getMatieres().map((m) => `<option value="${esc(m.nom)}" ${m.nom === choisie ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("") +
-    `<option value="__nouvelle__">➕ Nouvelle matière…</option>`
+    (avecAuto ? `<option value="">Détecter automatiquement</option>` : "") +
+    getMatieres().map((m) => `<option value="${esc(m.nom)}" ${m.nom === choisie ? "selected" : ""}>${esc(m.nom)}</option>`).join("") +
+    `<option value="__nouvelle__">+ Nouvelle matière…</option>`
   );
 }
 
@@ -228,7 +289,7 @@ function ouvrirAjoutMatiere(apresAjout) {
     (box, fermer) => {
       const fini = (nom) => {
         fermer();
-        toast(`${emoji(nom)} ${nom} ajoutée`);
+        toast(`${nom} ajoutée`);
         apresAjout ? apresAjout(nom) : render();
       };
       box.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => fini(ajouterMatiere({ nom: b.dataset.add }))));
@@ -244,7 +305,7 @@ function ouvrirAjoutMatiere(apresAjout) {
       box.querySelector("#nm-annuler").onclick = fermer;
       box.querySelector("#nm-ok").onclick = () => {
         const nom = box.querySelector("#nm-nom").value.trim();
-        if (!nom) return toast("Donne un nom à ta matière ✍️");
+        if (!nom) return toast("Donne un nom à ta matière");
         fini(
           ajouterMatiere({
             nom,
@@ -260,11 +321,14 @@ function carteFiche(f, avecMatiere = false) {
   const m = store.maitrise(f);
   const d = store.cartesDues(f).length;
   return `
-  <button class="fiche-card" data-open="${f.id}" style="--c:${couleur(f.matiere)}">
-    <div class="tag">${avecMatiere ? `${emoji(f.matiere)} ${esc(f.matiere)}${f.chapitre ? " · " + esc(f.chapitre) : ""}` : esc(f.chapitre || "Sans chapitre")}</div>
-    <div class="titre">${esc(f.titre)}</div>
-    <div class="meta">${f.flashcards.length} cartes · ${d ? `${d} à revoir` : "à jour ✅"}</div>
-    <div class="bar"><i style="width:${m}%"></i></div>
+  <button class="fiche" data-open="${f.id}">
+    ${avecMatiere ? pastille(f.matiere, "m") : ""}
+    <span class="fiche-txt">
+      <b>${esc(f.titre)}</b>
+      <small>${avecMatiere ? `${esc(f.matiere)} · ` : ""}${f.flashcards.length} cartes${d ? ` · <em>${d} à revoir</em>` : ""}</small>
+      <span class="jauge"><i style="width:${m}%;background:${couleur(f.matiere)}"></i></span>
+    </span>
+    ${ic("suite", 18, "chevron")}
   </button>`;
 }
 
@@ -272,18 +336,19 @@ function carteFiche(f, avecMatiere = false) {
 function matiereView() {
   const nom = ui.matiere;
   const fiches = store.getFiches().filter((f) => f.matiere === nom);
+  const head = `
+  <header class="top">
+    <button class="icon" data-go="matieres" aria-label="Retour">${ic("retour", 22)}</button>
+    <div class="title">${esc(nom)}</div>
+    <span class="icon-place"></span>
+  </header>
+  <div class="entete-matiere" style="--c:${couleur(nom)}">${pastille(nom, "l")}<div><h1>${esc(nom)}</h1><p class="sub">${fiches.length ? `${fiches.length} fiche${fiches.length > 1 ? "s" : ""}` : "Aucune fiche"}</p></div></div>`;
   if (!fiches.length) {
-    return `
-    <header class="top" style="--c:${couleur(nom)}">
-      <button class="icon" data-go="home">←</button>
-      <div class="title"><small>Aucune fiche</small>${emoji(nom)} ${esc(nom)}</div>
-      <span></span>
-    </header>
-    <div class="card center">
-      <div class="big-num">${emoji(nom)}</div>
-      <p>Pas encore de fiche en ${esc(nom)}.<br>Scanne ton premier cours pour commencer.</p>
-    </div>
-    <button class="btn primary big-btn" data-scan="${esc(nom)}">📸 Ajouter une fiche de ${esc(nom)}</button>
+    return `${head}
+    <section class="vide-etat">
+      <p>Pas encore de fiche en ${esc(nom)}. Scanne ton premier cours pour commencer.</p>
+      <button class="btn primary big-btn" data-scan="${esc(nom)}">${ic("camera", 20)} Ajouter une fiche</button>
+    </section>
     ${nom !== "Autre" ? `<button class="btn ghost big-btn" data-retirer="${esc(nom)}">Retirer ${esc(nom)} de mes matières</button>` : ""}`;
   }
   const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
@@ -291,20 +356,19 @@ function matiereView() {
   const chapitres = {};
   for (const f of fiches) (chapitres[f.chapitre || "Sans chapitre"] ||= []).push(f);
   const groupes = Object.entries(chapitres).sort(([a], [b]) => a.localeCompare(b, "fr"));
-  return `
-  <header class="top" style="--c:${couleur(nom)}">
-    <button class="icon" data-go="home">←</button>
-    <div class="title"><small>${fiches.length} fiche${fiches.length > 1 ? "s" : ""}</small>${emoji(nom)} ${esc(nom)}</div>
-    <span></span>
-  </header>
-  ${dues ? `<button class="btn primary big-btn" data-revision="${esc(nom)}">🃏 Réviser les cartes de ${esc(nom)} (${dues})</button>` : `<div class="card center">✅ Toutes les cartes de ${esc(nom)} sont à jour.</div>`}
-  <button class="btn secondary big-btn" data-scan="${esc(nom)}">📸 Ajouter une fiche de ${esc(nom)}</button>
-  <button class="btn ghost big-btn" data-nouveau-controle="${esc(nom)}">📅 J'ai un contrôle de ${esc(nom)}</button>
+  return `${head}
+  <div class="actions-rapides">
+    <button class="action" data-revision="${esc(nom)}" ${dues ? "" : "disabled"}>${ic("cartes", 20)}<span>Cartes${dues ? ` (${dues})` : ""}</span></button>
+    <button class="action" data-scan="${esc(nom)}">${ic("camera", 20)}<span>Ajouter</span></button>
+    <button class="action" data-nouveau-controle="${esc(nom)}">${ic("controle", 20)}<span>Contrôle</span></button>
+  </div>
   ${groupes
     .map(
-      ([chap, liste]) => `<div class="chap-head"><h3 class="chapitre">${esc(chap)}</h3>
+      ([chap, liste]) => `<section class="bloc">
+        <div class="bloc-titre"><h2 class="chapitre">${esc(chap)}</h2>
         <button class="pill-btn" data-chapitre="${esc(chap)}" data-m="${esc(nom)}">${resumeProgres(nom, chap)}</button></div>
-      <div class="list">${liste.sort((a, b) => b.cree - a.cree).map((f) => carteFiche(f)).join("")}</div>`
+        <div class="liste-lignes">${liste.sort((a, b) => b.cree - a.cree).map((f) => carteFiche(f)).join("")}</div>
+      </section>`
     )
     .join("")}`;
 }
@@ -317,27 +381,27 @@ let analyseEnCours = false;
 function scan() {
   const vide = !pages.length;
   return `
-  <header class="top"><button class="icon" data-back>←</button><div class="title">${scanMatiere ? `<small>${emoji(scanMatiere)} ${esc(scanMatiere)}</small>` : ""}Nouvelle fiche</div><span></span></header>
+  <header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title">${scanMatiere ? `<small>${pastille(scanMatiere, "s")} ${esc(scanMatiere)}</small>` : ""}Nouvelle fiche</div><span></span></header>
   ${
     vide
       ? `<p class="hint">Comment veux-tu scanner ton cours ?</p>
         <div class="choix-scan">
-          <button class="choix" data-scanmode="une"><span class="em">📄</span><b>Une page</b><small>Une photo, et c'est prêt.</small></button>
-          <button class="choix" data-scanmode="plusieurs"><span class="em">📚</span><b>Plusieurs pages</b><small>Enchaîne les photos sans valider chaque page.</small></button>
+          <button class="choix" data-scanmode="une"><span class="em">${ic("page", 28)}</span><b>Une page</b><small>Une photo, et c'est prêt.</small></button>
+          <button class="choix" data-scanmode="plusieurs"><span class="em">${ic("pages", 28)}</span><b>Plusieurs pages</b><small>Enchaîne les photos sans valider chaque page.</small></button>
         </div>
-        <button class="btn ghost big-btn" id="btn-import">🖼️ Importer depuis la galerie ou un PDF</button>`
+        <button class="btn ghost big-btn" id="btn-import">${ic("galerie")} Importer depuis la galerie ou un PDF</button>`
       : `<p class="hint">${pages.length} page${pages.length > 1 ? "s" : ""}. Vérifie l'ordre avec les flèches, puis crée ta fiche.</p>
         <div class="pages">
           ${pages
             .map(
               (p, i) => `<div class="page">${
-                p.kind === "pdf" ? `<div class="pdf">📄 PDF<br><small>${esc(p.name)}</small></div>` : `<img src="${p.preview}" alt="page ${i + 1}">`
-              }<button class="del" data-delpage="${i}" aria-label="Retirer la page ${i + 1}">✕</button><span class="num">${i + 1}</span>
-              ${pages.length > 1 ? `<span class="moves">${i ? `<button data-move="${i}" data-dir="-1" aria-label="Avancer la page ${i + 1}">◀</button>` : ""}${i < pages.length - 1 ? `<button data-move="${i}" data-dir="1" aria-label="Reculer la page ${i + 1}">▶</button>` : ""}</span>` : ""}</div>`
+                p.kind === "pdf" ? `<div class="pdf">${ic("page", 26)}<br>PDF<br><small>${esc(p.name)}</small></div>` : `<img src="${p.preview}" alt="page ${i + 1}">`
+              }<button class="del" data-delpage="${i}" aria-label="Retirer la page ${i + 1}">${ic("fermer", 14)}</button><span class="num">${i + 1}</span>
+              ${pages.length > 1 ? `<span class="moves">${i ? `<button data-move="${i}" data-dir="-1" aria-label="Avancer la page ${i + 1}">${ic("retour", 14)}</button>` : ""}${i < pages.length - 1 ? `<button data-move="${i}" data-dir="1" aria-label="Reculer la page ${i + 1}">${ic("suite", 14)}</button>` : ""}</span>` : ""}</div>`
             )
             .join("")}
-          <button class="page add" data-scanmode="plusieurs">📸<br>Ajouter des pages</button>
-          <button class="page add" id="btn-import">🖼️<br>Galerie / PDF</button>
+          <button class="page add" data-scanmode="plusieurs">${ic("camera", 24)}<span>Ajouter des pages</span></button>
+          <button class="page add" id="btn-import">${ic("galerie", 24)}<span>Galerie / PDF</span></button>
         </div>
         <label class="field">Matière
           <select id="scan-matiere">${optionsMatieres(scanMatiere, true)}</select>
@@ -345,7 +409,7 @@ function scan() {
         <label class="field">Une précision pour Claude ? (facultatif)
           <input id="note" placeholder="ex : chapitre 3, contrôle vendredi sur la partie 2" value="${esc(scanNote)}">
         </label>
-        <button class="btn primary big-btn" id="btn-analyser" ${analyseEnCours ? "disabled" : ""}>✨ Créer ma fiche (${pages.length} page${pages.length > 1 ? "s" : ""})</button>
+        <button class="btn primary big-btn" id="btn-analyser" ${analyseEnCours ? "disabled" : ""}>Créer ma fiche (${pages.length} page${pages.length > 1 ? "s" : ""})</button>
         <div id="progress"></div>`
   }
   <input type="file" id="file-import" accept="image/*,application/pdf" multiple hidden>
@@ -499,7 +563,7 @@ async function analyser() {
     scanNote = "";
     scanMatiere = "";
     go({ view: "fiche", ficheId: fiche.id, tab: "resume", ...(ui.retour === "matiere" ? { matiere: fiche.matiere } : {}) });
-    toast("Fiche créée ! 🎉");
+    toast("Fiche créée");
   } catch (e) {
     document.getElementById("progress").innerHTML = `<div class="error">${esc(e.message)}</div>`;
     btn.disabled = false;
@@ -511,11 +575,11 @@ async function analyser() {
 
 // ---------- Fiche ----------
 const TABS = [
-  ["resume", "📝", "Résumé"],
-  ["cartes", "🃏", "Cartes"],
-  ["qcm", "✅", "QCM"],
-  ["sujet", "📄", "Sujet"],
-  ["prof", "💬", "Prof"],
+  ["resume", "resume", "Résumé"],
+  ["cartes", "cartes", "Cartes"],
+  ["qcm", "qcm", "QCM"],
+  ["sujet", "sujet", "Sujet"],
+  ["prof", "prof", "Prof"],
 ];
 function ficheView() {
   const f = store.getFiche(ui.ficheId);
@@ -523,11 +587,11 @@ function ficheView() {
   const body = { resume: tabResume, cartes: tabCartes, qcm: tabQCM, sujet: tabSujet, prof: tabProf }[ui.tab](f);
   return `
   <header class="top" style="--c:${couleur(f.matiere)}">
-    <button class="icon" data-back>←</button>
-    <button class="title title-edit" id="btn-edit" aria-label="Modifier la matière, le chapitre ou le titre"><small>${emoji(f.matiere)} ${esc(f.matiere)}${f.chapitre ? " · " + esc(f.chapitre) : ""} ✏️</small>${esc(f.titre)}</button>
-    <button class="icon" id="btn-suppr" aria-label="Supprimer">🗑️</button>
+    <button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button>
+    <button class="title title-edit" id="btn-edit" aria-label="Modifier la matière, le chapitre ou le titre"><small>${pastille(f.matiere, "s")} ${esc(f.matiere)}${f.chapitre ? " · " + esc(f.chapitre) : ""} ${ic("modifier", 13)}</small>${esc(f.titre)}</button>
+    <button class="icon" id="btn-suppr" aria-label="Supprimer">${ic("supprimer")}</button>
   </header>
-  <nav class="tabs">${TABS.map(([k, i, l]) => `<button class="${ui.tab === k ? "on" : ""}" data-tab="${k}"><span>${i}</span>${l}</button>`).join("")}</nav>
+  <nav class="tabs">${TABS.map(([k, i, l]) => `<button class="${ui.tab === k ? "on" : ""}" data-tab="${k}">${ic(i, 18)}<span>${l}</span></button>`).join("")}</nav>
   <div class="tab-body">${body}</div>`;
 }
 afterRender.fiche = () => {
@@ -581,7 +645,7 @@ function editerFiche(f) {
           store.deplacerProgres(avant.matiere, avant.chapitre, fiche.matiere, fiche.chapitre);
         fermer();
         if (ui.retour === "matiere") ui.matiere = fiche.matiere;
-        toast("Fiche classée ✅");
+        toast("Fiche classée");
         render();
       };
     }
@@ -595,29 +659,29 @@ function tabResume(f) {
   return `
   ${
     sansDepart
-      ? `<div class="depart-banner"><span>🎯 <b>Nouveau chapitre ?</b> Fais le test de départ de « ${esc(chap)} » avant de réviser : tu pourras mesurer tes progrès.</span>
+      ? `<div class="depart-banner"><span>${ic("depart", 18)} <b>Nouveau chapitre ?</b> Fais le test de départ de « ${esc(chap)} » avant de réviser : tu pourras mesurer tes progrès.</span>
          <button class="btn secondary" data-chapitre="${esc(chap)}" data-m="${esc(f.matiere)}">Mes progrès</button></div>`
       : ""
   }
   <div class="md card">${md(f.resume)}</div>
   ${
     f.points_cles?.length
-      ? `<h3>🎯 À retenir</h3><ul class="keys">${f.points_cles.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`
+      ? `<h3>À retenir</h3><ul class="keys">${f.points_cles.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`
       : ""
   }
   ${
     f.vocabulaire?.length
-      ? `<h3>📖 Vocabulaire</h3><dl class="vocab">${f.vocabulaire
+      ? `<h3>Vocabulaire</h3><dl class="vocab">${f.vocabulaire
           .map((v) => `<div><dt>${esc(v.terme)}</dt><dd>${esc(v.definition)}</dd></div>`)
           .join("")}</dl>`
       : ""
   }
-  ${f.astuce ? `<div class="astuce">💡 <b>Astuce mémo :</b> ${esc(f.astuce)}</div>` : ""}
+  ${f.astuce ? `<div class="astuce">${ic("astuce", 18)} <span><b>Astuce mémo</b>  ${esc(f.astuce)}</div>` : ""}
   ${connexesHTML(f)}
   <details class="card"><summary>Voir le texte du cours scanné</summary><div class="md">${md(f.transcription)}</div></details>
   <div class="row">
-    <button class="btn secondary" data-tab="cartes">🃏 Réviser les cartes</button>
-    <button class="btn secondary" data-tab="qcm">✅ Faire un QCM</button>
+    <button class="btn secondary" data-tab="cartes">${ic("cartes", 18)} Réviser les cartes</button>
+    <button class="btn secondary" data-tab="qcm">${ic("qcm", 18)} Faire un QCM</button>
   </div>`;
 }
 function bindResume(f) {
@@ -670,25 +734,25 @@ function ficheDuConnexe(c, f) {
   return store.getFiches().find((x) => x.id !== f.id && communs(mc, motsCles([x.titre, x.chapitre, ...(x.vocabulaire || []).map((v) => v.terme)].join(" "))) >= Math.min(2, mc.size));
 }
 const GROUPES_CONNEXES = [
-  ["prerequis", "⬅️ À revoir avant"],
-  ["approfondissement", "➕ Pour aller plus loin"],
-  ["autre_matiere", "🔀 Dans une autre matière"],
+  ["prerequis", "À revoir avant"],
+  ["approfondissement", "Pour aller plus loin"],
+  ["autre_matiere", "Dans une autre matière"],
 ];
 function connexesHTML(f) {
   const liees = fichesLiees(f);
   const liens = liees.length
-    ? `<div class="liees"><b>📚 Ça rejoint tes fiches :</b>${liees.map((x) => `<button class="lien-fiche" data-open="${x.id}">${emoji(x.matiere)} ${esc(x.titre)}</button>`).join("")}</div>`
+    ? `<div class="liees"><b>Ça rejoint tes fiches</b>${liees.map((x) => `<button class="lien-fiche" data-open="${x.id}">${pastille(x.matiere, "s")} ${esc(x.titre)}</button>`).join("")}</div>`
     : "";
   if (!f.connexes?.length)
-    return `<div class="card connexes"><h3>🔗 Pour aller plus loin</h3>
+    return `<div class="card connexes"><h3>${ic("lien", 18)} Pour aller plus loin</h3>
       <p class="hint">Découvre ce qu'il faut revoir avant ce cours, ce qui le prolonge et ses liens avec tes autres matières.</p>
-      <button class="btn secondary big-btn" id="btn-connexes">🔗 Trouver les sujets connexes</button><div id="progress-connexes"></div>${liens}</div>`;
-  return `<div class="card connexes"><h3>🔗 Pour aller plus loin</h3>
+      <button class="btn secondary big-btn" id="btn-connexes">${ic("lien", 18)} Trouver les sujets connexes</button><div id="progress-connexes"></div>${liens}</div>`;
+  return `<div class="card connexes"><h3>${ic("lien", 18)} Pour aller plus loin</h3>
     ${GROUPES_CONNEXES.map(([type, titre]) => {
       const items = f.connexes.map((c, i) => ({ c, i })).filter(({ c }) => c.type === type);
       if (!items.length) return "";
       return `<div class="cx-groupe"><small>${titre}</small><div class="cx-chips">${items
-        .map(({ c, i }) => `<button class="cx-chip" data-connexe="${i}" style="--c:${couleur(c.matiere)}">${type === "autre_matiere" ? emoji(c.matiere) + " " : ""}${esc(c.titre)}${c.mini ? " ✓" : ""}</button>`)
+        .map(({ c, i }) => `<button class="cx-chip" data-connexe="${i}" style="--c:${couleur(c.matiere)}">${type === "autre_matiere" ? pastille(c.matiere, "s") + " " : ""}${esc(c.titre)}${c.mini ? ic("ok", 14) : ""}</button>`)
         .join("")}</div></div>`;
     }).join("")}
     ${liens}</div>`;
@@ -698,11 +762,11 @@ function ouvrirConnexe(f, i) {
   const liee = ficheDuConnexe(c, f);
   const libelle = Object.fromEntries(GROUPES_CONNEXES)[c.type] || "Sujet connexe";
   modale(
-    `<small class="cx-type">${libelle} · ${emoji(c.matiere)} ${esc(c.matiere)}</small>
+    `<small class="cx-type">${libelle} · ${pastille(c.matiere, "s")} ${esc(c.matiere)}</small>
     <h3>${esc(c.titre)}</h3>
     <p>${esc(c.pourquoi)}</p>
-    ${liee ? `<button class="btn secondary big-btn" data-ouvrir="${liee.id}">📚 Ta fiche : ${esc(liee.titre)}</button>` : ""}
-    <div id="cx-mini">${c.mini ? `<div class="md card">${md(c.mini)}</div>` : `<button class="btn primary big-btn" id="cx-gen">✨ Mini-fiche sur ce sujet</button><p class="hint center">Un petit appel à Claude, gardé ensuite sur la fiche.</p>`}</div>
+    ${liee ? `<button class="btn secondary big-btn" data-ouvrir="${liee.id}">${ic("resume", 18)} Ta fiche : ${esc(liee.titre)}</button>` : ""}
+    <div id="cx-mini">${c.mini ? `<div class="md card">${md(c.mini)}</div>` : `<button class="btn primary big-btn" id="cx-gen">Mini-fiche sur ce sujet</button><p class="hint center">Un petit appel à Claude, gardé ensuite sur la fiche.</p>`}</div>
     <button class="btn ghost" id="cx-fermer">Fermer</button>`,
     (box, fermer) => {
       box.querySelector("#cx-fermer").onclick = fermer;
@@ -745,9 +809,9 @@ function tabCartes(f) {
       <div class="bar wide"><i style="width:${store.maitrise(f)}%"></i></div>
       <small>Maîtrise : ${store.maitrise(f)} %</small>
     </div>
-    <button class="btn primary big-btn" id="start-due" ${store.cartesDues(f).length ? "" : "disabled"}>▶️ Réviser les cartes à revoir</button>
-    <button class="btn secondary big-btn" id="start-all">🔀 Tout réviser (mélangé)</button>
-    <button class="btn ghost big-btn" id="more-cards">➕ 10 cartes de plus avec Claude</button>
+    <button class="btn primary big-btn" id="start-due" ${store.cartesDues(f).length ? "" : "disabled"}>${ic("jouer", 18)} Réviser les cartes à revoir</button>
+    <button class="btn secondary big-btn" id="start-all">${ic("melanger", 18)} Tout réviser (mélangé)</button>
+    <button class="btn ghost big-btn" id="more-cards">${ic("plus", 18)} 10 cartes de plus</button>
     <div id="progress"></div>
     <h3>Toutes les cartes</h3>
     <div class="all-cards">${f.flashcards
@@ -759,7 +823,7 @@ function tabCartes(f) {
 function sessionCartes(ficheId, s) {
   if (s.i >= s.cartes.length) {
     return `<div class="card center done">
-      <div class="big-num">🎉</div>
+      <div class="rond-ok">${ic("fait", 34)}</div>
       <p>Bravo ! ${s.sues} / ${s.cartes.length} cartes sues.</p>
       <p class="sub">Les cartes ratées reviendront plus vite, les autres plus tard.</p>
       <button class="btn primary" id="end-session">Terminer</button></div>`;
@@ -773,7 +837,7 @@ function sessionCartes(ficheId, s) {
   </div>
   ${
     s.retourne
-      ? `<div class="row"><button class="btn bad" id="ko">😕 À revoir</button><button class="btn good" id="ok">😎 Je savais</button></div>`
+      ? `<div class="row"><button class="btn bad" id="ko">${ic("refaire", 18)} À revoir</button><button class="btn good" id="ok">${ic("ok", 18)} Je savais</button></div>`
       : `<button class="btn secondary big-btn" id="show">Voir la réponse</button>`
   }
   <button class="btn ghost" id="end-session">Arrêter</button>`;
@@ -848,7 +912,7 @@ function revision() {
       .flatMap((f) => store.cartesDues(f).map((c) => ({ ...c, ficheId: f.id })));
     sessionJour = { cartes: shuffle(cartes).slice(0, 40), i: 0, retourne: false, sues: 0 };
   }
-  return `<header class="top"><button class="icon" data-back>←</button><div class="title">${ui.revMatiere ? `<small>${emoji(ui.revMatiere)} ${esc(ui.revMatiere)}</small>` : ""}Révision du jour</div><span></span></header>
+  return `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title">${ui.revMatiere ? `<small>${pastille(ui.revMatiere, "s")} ${esc(ui.revMatiere)}</small>` : ""}Révision du jour</div><span></span></header>
   ${sessionCartes(null, sessionJour)}`;
 }
 afterRender.revision = () =>
@@ -879,8 +943,8 @@ function tabQCM(f) {
         .map((n) => `<button class="${qcmNiveau === n ? "on" : ""}" data-niveau="${n}">${n}</button>`)
         .join("")}</div>
       <div class="seg">${[5, 10, 20].map((n) => `<button class="${qcmNombre === n ? "on" : ""}" data-nombre="${n}">${n} questions</button>`).join("")}</div>
-      <button class="btn primary big-btn" id="gen-qcm">✨ Générer le QCM</button>
-      ${f.dernierQCM?.length ? `<button class="btn secondary big-btn" id="replay-qcm">🔁 Refaire le dernier QCM (${f.dernierQCM.length} questions, sans appel à Claude)</button>` : ""}
+      <button class="btn primary big-btn" id="gen-qcm">Générer le QCM</button>
+      ${f.dernierQCM?.length ? `<button class="btn secondary big-btn" id="replay-qcm">${ic("refaire", 18)} Refaire le dernier QCM (${f.dernierQCM.length} questions, sans appel à Claude)</button>` : ""}
       <div id="progress"></div>
     </div>
     ${
@@ -899,7 +963,7 @@ function tabQCM(f) {
     return `<div class="card center done">
       <div class="big-num">${note}/20</div>
       <p>${qcm.score} bonne${qcm.score > 1 ? "s" : ""} réponse${qcm.score > 1 ? "s" : ""} sur ${qcm.questions.length}</p>
-      <p class="sub">${note >= 16 ? "Excellent, tu maîtrises ! 🏆" : note >= 12 ? "Bien joué, encore un petit effort 💪" : "Relis le résumé puis réessaie, tu vas y arriver 📚"}</p>
+      <p class="sub">${note >= 16 ? "Excellent, tu maîtrises !" : note >= 12 ? "Bien joué, encore un petit effort" : "Relis le résumé puis réessaie, tu vas y arriver"}</p>
       ${qcm.erreurs.length ? `<h3>À revoir</h3><ul class="keys">${qcm.erreurs.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
       <div class="row"><button class="btn secondary" id="qcm-fin">Terminer</button><button class="btn primary" id="qcm-again">Nouveau QCM</button></div>
     </div>`;
@@ -918,7 +982,7 @@ function tabQCM(f) {
     .join("")}</div>
   ${
     rep !== null
-      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? "✅ Bravo !" : "❌ Raté."} ${esc(q.explication)}</div>
+      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? "Bravo !" : "Raté."} ${esc(q.explication)}</div>
          <button class="btn primary big-btn" id="qcm-next">${qcm.i + 1 < qcm.questions.length ? "Question suivante →" : "Voir mon score"}</button>`
       : ""
   }
@@ -992,26 +1056,26 @@ function tabSujet(f) {
       <div class="seg wrap">${Object.entries(ai.TYPES_SUJET)
         .map(([k, l]) => `<button class="${sujetType === k ? "on" : ""}" data-stype="${k}">${l}</button>`)
         .join("")}</div>
-      <button class="btn primary big-btn" id="gen-sujet">✨ Générer le sujet</button>
+      <button class="btn primary big-btn" id="gen-sujet">Générer le sujet</button>
       <div id="progress"></div>
     </div>
     ${
       f.sujets.length
-        ? `<h3>Mes sujets</h3>${f.sujets
+        ? `<h3>Mes sujets</h3><div class="liste-lignes">${f.sujets
             .map(
               (x, i) =>
-                `<button class="fiche-card small" data-sujet="${i}"><div class="titre">${esc(x.titre)}</div><div class="meta">${esc(x.duree)}${x.note ? " · corrigé ✔︎" : ""}</div></button>`
+                `<button class="ligne" data-sujet="${i}">${ic("sujet", 20, "t-ic")}<span class="ligne-txt"><b>${esc(x.titre)}</b><small>${esc(x.duree)}${x.note ? " · corrigée" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
             )
-            .join("")}`
+            .join("")}</div>`
         : ""
     }`;
   }
   return `
-  <button class="btn ghost" id="sujet-back">← Mes sujets</button>
-  <div class="card md"><h2>${esc(s.titre)}</h2><p class="sub">⏱️ ${esc(s.duree)}</p>${md(s.sujet)}</div>
-  <h3>✍️ Ma réponse</h3>
+  <button class="btn ghost" id="sujet-back">${ic("retour", 18)} Mes sujets</button>
+  <div class="card md"><h2>${esc(s.titre)}</h2><p class="sub">${ic("heure", 15)} ${esc(s.duree)}</p>${md(s.sujet)}</div>
+  <h3>Ma réponse</h3>
   <textarea id="copie" rows="8" placeholder="Écris tes réponses ici (ou résume-les), puis demande la correction.">${esc(s.copie || "")}</textarea>
-  <button class="btn primary big-btn" id="corriger">🧑‍🏫 Corriger ma copie</button>
+  <button class="btn primary big-btn" id="corriger">${ic("copie", 18)} Corriger ma copie</button>
   <div id="progress"></div>
   ${s.note ? `<div class="card md correction">${md(s.note)}</div>` : ""}
   <button class="btn secondary big-btn" id="toggle-corrige">${corrigeVisible ? "Cacher" : "Voir"} le corrigé</button>
@@ -1051,7 +1115,7 @@ function bindSujet(f) {
       store.saveFiche(f);
     };
     $("corriger").onclick = async (e) => {
-      if (!s.copie?.trim()) return toast("Écris d'abord ta réponse ✍️");
+      if (!s.copie?.trim()) return toast("Écris d'abord ta réponse");
       e.target.disabled = true;
       const p = progressUI($("progress"), "Le prof corrige ta copie…");
       try {
@@ -1081,7 +1145,7 @@ function tabProf(f) {
   ${!f.chat.length ? `<div class="sugg">${suggestions.map((s) => `<button class="chip" data-sugg="${esc(s)}">${esc(s)}</button>`).join("")}</div>` : ""}
   <form class="composer" id="composer">
     <input id="msg" placeholder="Pose ta question…" autocomplete="off">
-    <button class="btn primary" ${chatBusy ? "disabled" : ""}>➤</button>
+    <button class="btn primary" ${chatBusy ? "disabled" : ""}aria-label="Envoyer">${ic("send", 18)}</button>
   </form>
   ${f.chat.length ? `<button class="btn ghost" id="clear-chat">Effacer la conversation</button>` : ""}`;
 }
@@ -1130,14 +1194,14 @@ const CLASSES = ["CM2", "6e", "5e", "4e", "3e", "Seconde", "Première", "Termina
 function settings() {
   const s = store.getSettings();
   return `
-  <header class="top"><button class="icon" data-go="home">←</button><div class="title">Réglages</div><span></span></header>
+  <header class="page-head"><div><p class="eyebrow">Profil et réglages</p><h1>${s.prenom ? esc(s.prenom) : "Profil"}</h1></div></header>
   <label class="field">Ton prénom<input id="prenom" value="${esc(s.prenom)}" placeholder="ex : Lucas"></label>
   <label class="field">Ta classe<select id="classe">${CLASSES.map((c) => `<option ${c === s.classe ? "selected" : ""}>${c}</option>`).join("")}</select></label>
   ${
     DEMO_ONLY
-      ? `<div class="card parent"><h3>👨‍👩‍👦 Espace parent</h3><p class="hint">Dans l'appli Android, c'est ici que tu colles la clé API Claude et que tu choisis le modèle. Cette maquette fonctionne uniquement en mode démo.</p></div>`
+      ? `<div class="card parent"><h3>${ic("cle", 18)} Espace parent</h3><p class="hint">Dans l'appli Android, c'est ici que tu colles la clé API Claude et que tu choisis le modèle. Cette maquette fonctionne uniquement en mode démo.</p></div>`
       : `<div class="card parent">
-    <h3>👨‍👩‍👦 Espace parent</h3>
+    <h3>${ic("cle", 18)} Espace parent</h3>
     <div class="seg" role="group" aria-label="Connexion à Claude">
       <button data-cx="serveur" class="${s.connexion !== "cle" ? "on" : ""}">Code famille</button>
       <button data-cx="cle" class="${s.connexion === "cle" ? "on" : ""}">Clé API personnelle</button>
@@ -1165,12 +1229,12 @@ function settings() {
   ${s.demo && !DEMO_ONLY ? `<button class="btn ghost big-btn" id="quit-demo">Quitter la démo</button>` : ""}
   <div id="progress"></div>
   <div class="card">
-    <h3>📚 Mes matières</h3>
+    <h3>Mes matières</h3>
     <div class="mes-matieres">${getMatieres()
       .filter((m) => m.nom !== "Autre")
-      .map((m) => `<span class="chip-m" style="--c:${m.couleur}">${m.emoji} ${esc(m.nom)}<button data-retirer="${esc(m.nom)}" aria-label="Retirer ${esc(m.nom)}">✕</button></span>`)
+      .map((m) => `<span class="chip-m" style="--c:${m.couleur}">${pastille(m.nom, "s")} ${esc(m.nom)}<button data-retirer="${esc(m.nom)}" aria-label="Retirer ${esc(m.nom)}">${ic("fermer", 14)}</button></span>`)
       .join("")}</div>
-    <button class="btn secondary big-btn" data-ajout-matiere>➕ Ajouter une matière</button>
+    <button class="btn secondary big-btn" data-ajout-matiere>${ic("plus", 18)} Ajouter une matière</button>
   </div>
   ${DEMO_ONLY ? "" : sauvegardeHTML()}
   ${consoHTML()}
@@ -1185,10 +1249,10 @@ function sauvegardeHTML() {
   const der = sauvegarde.derniereSauvegarde();
   const natif = Capacitor.isNativePlatform();
   return `<div class="card" id="carte-sauvegarde">
-    <h3>💾 Sauvegarde et synchronisation</h3>
+    <h3>Sauvegarde et synchronisation</h3>
     <p class="${der && Date.now() - der < 7 * 864e5 ? "hint" : "alerte"}">Dernière sauvegarde : <b>${der ? ilYa(der) : "jamais"}</b></p>
-    <button class="btn primary big-btn" id="btn-sauver">${natif ? "📤 Sauvegarder vers Drive" : "📤 Télécharger une sauvegarde"}</button>
-    <button class="btn secondary big-btn" id="btn-reprendre">📥 Reprendre une sauvegarde</button>
+    <button class="btn primary big-btn" id="btn-sauver">${ic(natif ? "envoyer" : "telecharger", 18)} ${natif ? "Sauvegarder vers Drive" : "Télécharger une sauvegarde"}</button>
+    <button class="btn secondary big-btn" id="btn-reprendre">${ic("actualiser", 18)} Reprendre une sauvegarde</button>
     <input type="file" id="file-sauvegarde" accept="application/json,.json" hidden>
     <details class="aide"><summary>Passer du téléphone au site web (et inversement)</summary>
       <ol>
@@ -1225,9 +1289,9 @@ function bindSauvegarde() {
     modale(
       `<h3>Reprendre la sauvegarde</h3>
       <p>Sauvegarde du <b>${new Date(s.date).toLocaleDateString("fr-FR")}</b> : ${nb} fiche${nb > 1 ? "s" : ""}.</p>
-      <button class="btn primary big-btn" data-mode="fusionner">🔀 Fusionner (recommandé)</button>
+      <button class="btn primary big-btn" data-mode="fusionner">${ic("fusion", 18)} Fusionner (recommandé)</button>
       <p class="hint">Garde les fiches de cet appareil et ajoute celles de la sauvegarde.</p>
-      <button class="btn secondary big-btn" data-mode="remplacer">♻️ Tout remplacer</button>
+      <button class="btn secondary big-btn" data-mode="remplacer">Tout remplacer</button>
       <p class="hint">Cet appareil devient une copie exacte de la sauvegarde.</p>
       <button class="btn ghost" data-mode="">Annuler</button>`,
       (box, fermer) =>
@@ -1251,7 +1315,7 @@ function consoHTML() {
   const total = c.entree + c.cache + c.sortie;
   const partCache = total ? Math.round((c.cache / (c.entree + c.cache || 1)) * 100) : 0;
   return `<div class="card conso">
-    <h3>🌱 Consommation</h3>
+    <h3>${ic("eco", 18)} Consommation</h3>
     <div class="conso-grid">
       <div><b>${nf(c.appels)}</b><span>demandes à Claude</span></div>
       <div><b>${nf(c.entree + c.cache)}</b><span>tokens lus</span></div>
@@ -1300,7 +1364,7 @@ afterRender.settings = () => {
     const pret = ai.estConfigure({ ...s, demo: false });
     if (!pret && !s.demo) return toast(s.connexion === "cle" ? "Il faut une clé API pour utiliser Révizz." : "Il faut l'adresse du site et le code famille.");
     if (pret && s.demo && !DEMO_ONLY) quitterDemo();
-    toast("Enregistré ✅");
+    toast("Enregistré");
     go({ view: "home" });
   };
   if ($("quit-demo"))
@@ -1315,7 +1379,7 @@ afterRender.settings = () => {
     const p = progressUI($("progress"), "Je contacte Claude…");
     try {
       await ai.testerCle();
-      $("progress").innerHTML = `<div class="success">Connexion à Claude réussie ✅</div>`;
+      $("progress").innerHTML = `<div class="success">${ic("fait", 18)} Connexion à Claude réussie</div>`;
     } catch (err) {
       $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
     } finally {
@@ -1347,14 +1411,14 @@ function ficheChapitre(m, c) {
     transcription: fiches.map((f) => `## ${f.titre}\n${f.transcription}`).join("\n\n"),
   };
 }
-const humeur = (n) => (n >= 16 ? "🤩" : n >= 12 ? "😃" : n >= 8 ? "🙂" : "😕");
+const humeur = (n) => (n >= 16 ? "Excellent" : n >= 12 ? "Bien" : n >= 8 ? "En progrès" : "À travailler");
 const noteDe = (r) => store.sur20(r.score, r.total);
 
 function resumeProgres(m, c) {
   const p = store.getProgres(m, c);
-  if (!p.depart) return "🎯 Mesurer mes progrès";
+  if (!p.depart) return `${ic("depart", 15)} Mesurer mes progrès`;
   const fin = p.finals?.at(-1);
-  return fin ? `📈 ${noteDe(p.depart)} → ${noteDe(fin)}/20` : `📈 Départ ${noteDe(p.depart)}/20`;
+  return fin ? `${ic("progres", 15)} ${noteDe(p.depart)} → ${noteDe(fin)}/20` : `${ic("progres", 15)} Départ ${noteDe(p.depart)}/20`;
 }
 
 // Points du graphique : test de départ, QCM d'entraînement du chapitre, tests finals, dans l'ordre.
@@ -1372,7 +1436,7 @@ function pointsDuChapitre(m, c) {
 
 // Graphique en courbe, notes sur 20, avec la ligne de la moyenne.
 function graphique(points) {
-  const W = 320, H = 190, L = 30, R = 14, T = 18, B = 34;
+  const W = 320, H = 190, L = 30, R = 26, T = 18, B = 34;
   const w = W - L - R, h = H - T - B;
   const x = (i) => (points.length === 1 ? L + w / 2 : L + (i * w) / (points.length - 1));
   const y = (n) => T + (1 - n / 20) * h;
@@ -1405,15 +1469,15 @@ function avantApres(p) {
     <div class="aa-col">
       <div class="aa-note">${note === null ? "?" : `${note}<small>/20</small>`}</div>
       <div class="aa-track"><div class="aa-bar ${cls}" style="height:${note === null ? 100 : Math.max(4, (note / 20) * 100)}%"></div></div>
-      <div class="aa-lab">${note === null ? "⏳" : humeur(note)} ${titre}</div>
+      <div class="aa-lab"><b>${titre}</b><br>${note === null ? "à faire" : humeur(note)}</div>
     </div>`;
   let message = "Révise tes fiches et tes cartes, puis fais le test final pour voir tes progrès !";
   if (apres !== null) {
     const gain = apres - avant;
     message =
-      gain >= 6 ? `+${gain} points : énorme progrès ! 🚀` :
-      gain >= 3 ? `+${gain} points : beau progrès ! 💪` :
-      gain > 0 ? `+${gain} point${gain > 1 ? "s" : ""} : tu progresses 👍` :
+      gain >= 6 ? `+${gain} points : énorme progrès !` :
+      gain >= 3 ? `+${gain} points : beau progrès !` :
+      gain > 0 ? `+${gain} point${gain > 1 ? "s" : ""} : tu progresses` :
       gain === 0 ? "Même note qu'au départ : refais un tour des cartes et réessaie." :
       "Pas grave : revois les cartes à revoir, puis retente le test final.";
   }
@@ -1433,14 +1497,14 @@ function chapitreView() {
   const maitrise = cartes.length ? Math.round(fiches.reduce((s, f) => s + store.maitrise(f) * f.flashcards.length, 0) / cartes.length) : 0;
   return `
   <header class="top" style="--c:${couleur(m)}">
-    <button class="icon" data-back>←</button>
-    <div class="title"><small>${emoji(m)} ${esc(m)} · Mes progrès</small>${esc(c)}</div>
+    <button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button>
+    <div class="title"><small>${pastille(m, "s")} ${esc(m)} · Mes progrès</small>${esc(c)}</div>
     <span></span>
   </header>
   ${
     !p.depart
       ? `<div class="card">
-          <h3>🎯 Test de départ</h3>
+          <h3>${ic("depart", 18)} Test de départ</h3>
           <p>Fais-le <b>au début du chapitre</b>, avant de réviser : il montre d'où tu pars. Une note basse est normale, c'est justement ce qu'on veut mesurer !</p>
           <p class="hint">10 questions sur tout le chapitre. À la fin du chapitre, tu referas le même test pour voir tes progrès.</p>
           <button class="btn primary big-btn" data-test="depart">Commencer le test de départ</button>
@@ -1448,17 +1512,17 @@ function chapitreView() {
         </div>`
       : `${avantApres(p)}
         <div class="card">
-          <h3>📈 Ton parcours</h3>
+          <h3>${ic("progres", 18)} Ton parcours</h3>
           ${graphique(pts)}
           <div class="legende"><span><i class="g-depart"></i>Départ</span><span><i class="g-qcm"></i>QCM d'entraînement</span><span><i class="g-final"></i>Test final</span><span><i class="g-moy-l"></i>Moyenne (10/20)</span></div>
-          <div class="maitrise"><span>🃏 Cartes maîtrisées</span><div class="bar wide"><i style="width:${maitrise}%"></i></div><b>${maitrise} %</b></div>
+          <div class="maitrise"><span>${ic("cartes", 16)} Cartes maîtrisées</span><div class="bar wide"><i style="width:${maitrise}%"></i></div><b>${maitrise} %</b></div>
         </div>
-        <button class="btn primary big-btn" data-test="final">${p.finals?.length ? "🔁 Refaire le test final" : "🏁 Faire le test final"}</button>
+        <button class="btn primary big-btn" data-test="final">${ic(p.finals?.length ? "refaire" : "final", 18)} ${p.finals?.length ? "Refaire le test final" : "Faire le test final"}</button>
         <p class="hint center">Les mêmes questions qu'au départ, dans un autre ordre : la comparaison est juste.</p>
         <div id="progress"></div>`
   }
   <h3 class="chapitre">Fiches du chapitre</h3>
-  <div class="list">${fiches.map((f) => carteFiche(f)).join("")}</div>`;
+  <div class="liste-lignes">${fiches.map((f) => carteFiche(f)).join("")}</div>`;
 }
 
 let test = null; // { type, questions, i, choisi, score, erreurs, fini }
@@ -1493,8 +1557,8 @@ function testView() {
     ui.view = "chapitre";
     return chapitreView();
   }
-  const titre = test.type === "depart" ? "🎯 Test de départ" : "🏁 Test final";
-  const head = `<header class="top" style="--c:${couleur(ui.matiere)}"><button class="icon" data-back>←</button><div class="title"><small>${esc(ui.chapitre)}</small>${titre}</div><span></span></header>`;
+  const titre = test.type === "depart" ? "Test de départ" : "Test final";
+  const head = `<header class="top" style="--c:${couleur(ui.matiere)}"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title"><small>${esc(ui.chapitre)}</small>${titre}</div><span></span></header>`;
   if (test.i >= test.questions.length) {
     const note = store.sur20(test.score, test.questions.length);
     const p = store.getProgres(ui.matiere, ui.chapitre);
@@ -1507,7 +1571,7 @@ function testView() {
       <p>${test.score} bonne${test.score > 1 ? "s" : ""} réponse${test.score > 1 ? "s" : ""} sur ${test.questions.length}</p>
       ${comparaison}
       ${test.erreurs.length ? `<h3>À revoir</h3><ul class="keys">${test.erreurs.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
-      <button class="btn primary big-btn" id="test-voir">📈 Voir mes progrès</button>
+      <button class="btn primary big-btn" id="test-voir">${ic("progres", 18)} Voir mes progrès</button>
     </div>`;
   }
   const q = test.questions[test.i];
@@ -1524,7 +1588,7 @@ function testView() {
     .join("")}</div>
   ${
     rep !== null
-      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? "✅ Bravo !" : "❌ Raté."} ${esc(q.explication)}</div>
+      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? "Bravo !" : "Raté."} ${esc(q.explication)}</div>
          <button class="btn primary big-btn" id="test-next">${test.i + 1 < test.questions.length ? "Question suivante →" : "Voir ma note"}</button>`
       : ""
   }`;
@@ -1567,74 +1631,202 @@ afterRender.test = () => {
 
 // ---------- Mode « J'ai un contrôle » ----------
 const dateLisible = (isoDate) => new Date(isoDate + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+const dateCourte = (isoDate) => new Date(isoDate + "T12:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
 const libelleJour = (isoDate) => {
   const r = Math.round((new Date(isoDate + "T12:00") - new Date(ctrl.aujourdhui() + "T12:00")) / 864e5);
   return r === 0 ? "Aujourd'hui" : r === 1 ? "Demain" : dateLisible(isoDate);
 };
 const compteARebours = (c) => {
   const r = ctrl.joursRestants(c);
-  return r === 0 ? "C'est aujourd'hui !" : r === 1 ? "Demain" : `Dans ${r} jours`;
+  return r === 0 ? "Aujourd'hui" : r === 1 ? "Demain" : `Dans ${r} jours`;
 };
+const ICONE_TACHE = { relire: "resume", qcm: "qcm", sujet: "sujet", cartes: "cartes", points: "resume", test: "final" };
 
+// Sur l'accueil : les contrôles à venir, avec l'avancement du jour.
 function controlesAccueil() {
-  if (DEMO_ONLY && !store.getFiches().length) return "";
   const prochains = ctrl.aVenir();
   const aNoter = ctrl.passes().filter((c) => c.note === null && ctrl.joursRestants(c) >= -7);
-  const cartes = prochains
-    .map((c) => {
+  return [
+    ...prochains.map((c) => {
       const { taches, faites } = ctrl.duJour(c);
-      return `<button class="ctrl-card" data-controle="${c.id}" style="--c:${couleur(c.matiere)}">
-        <span class="em">${emoji(c.matiere)}</span>
-        <span class="ctrl-txt"><b>Contrôle de ${esc(c.matiere)}${c.titre ? ` · ${esc(c.titre)}` : ""}</b>
-        <small>${compteARebours(c)} · ${dateLisible(c.date)}</small>
-        ${taches.length ? `<span class="bar"><i style="width:${Math.round((faites / taches.length) * 100)}%"></i></span><small>Aujourd'hui : ${faites}/${taches.length} tâche${taches.length > 1 ? "s" : ""}</small>` : ""}</span>
+      return `<button class="ligne" data-controle="${c.id}">
+        ${pastille(c.matiere, "m")}
+        <span class="ligne-txt"><b>Contrôle de ${esc(c.matiere)}</b><small>${compteARebours(c)}${taches.length ? ` · ${faites}/${taches.length} tâche${taches.length > 1 ? "s" : ""} aujourd'hui` : ""}</small></span>
+        <span class="jx">${ctrl.joursRestants(c) === 0 ? "J" : `J-${ctrl.joursRestants(c)}`}</span>
       </button>`;
-    })
-    .join("");
-  const notes = aNoter
-    .map((c) => `<button class="ctrl-card passe" data-controle="${c.id}" style="--c:${couleur(c.matiere)}"><span class="em">📝</span><span class="ctrl-txt"><b>Ton contrôle de ${esc(c.matiere)} : quelle note ?</b><small>Note-la pour suivre tes progrès</small></span></button>`)
-    .join("");
-  return `${cartes || notes ? `<h3>📅 Mes contrôles</h3><div class="list">${cartes}${notes}</div>` : ""}
-    <button class="btn ghost big-btn" data-nouveau-controle="">📅 J'ai un contrôle</button>`;
+    }),
+    ...aNoter.map(
+      (c) => `<button class="ligne" data-controle="${c.id}">${pastille(c.matiere, "m")}<span class="ligne-txt"><b>Ta note en ${esc(c.matiere)} ?</b><small>Note-la pour suivre tes progrès</small></span>${ic("suite", 18, "chevron")}</button>`
+    ),
+  ].join("");
 }
 
-function ouvrirNouveauControle(matiere) {
+// ---------- Planning : tous les contrôles ----------
+function planning() {
+  const prochains = ctrl.aVenir();
+  const passes = ctrl.passes().slice(0, 8);
+  const carte = (c) => {
+    const plan = ctrl.planning(c);
+    const total = plan.reduce((n, j) => n + j.taches.length, 0);
+    const faites = plan.reduce((n, j) => n + j.taches.filter((t) => c.faits[t.id]).length, 0);
+    return `<button class="ligne" data-controle="${c.id}">
+      ${pastille(c.matiere, "m")}
+      <span class="ligne-txt"><b>${esc(c.matiere)}${c.titre ? ` · ${esc(c.titre)}` : ""}</b><small>${dateLisible(c.date)}</small>
+      ${total ? `<span class="jauge"><i style="width:${Math.round((faites / total) * 100)}%;background:${couleur(c.matiere)}"></i></span>` : ""}</span>
+      <span class="jx">${ctrl.joursRestants(c) === 0 ? "J" : `J-${ctrl.joursRestants(c)}`}</span>
+    </button>`;
+  };
+  return `
+  <header class="page-head"><div><p class="eyebrow">Contrôles et révisions</p><h1>Planning</h1></div></header>
+  <button class="btn primary big-btn" data-nouveau-controle="">${ic("controle", 20)} Nouveau contrôle</button>
+  ${
+    prochains.length
+      ? `<section class="bloc"><h2>À venir</h2><div class="liste-lignes">${prochains.map(carte).join("")}</div></section>`
+      : `<section class="vide-etat"><p>Aucun contrôle prévu. Ajoute la date de ton prochain contrôle : Révizz te prépare un planning jour par jour, avec relectures, QCM et sujets blancs.</p></section>`
+  }
+  ${
+    passes.length
+      ? `<section class="bloc"><h2>Passés</h2><div class="liste-lignes">${passes
+          .map((c) => `<button class="ligne" data-controle="${c.id}">${pastille(c.matiere, "m")}<span class="ligne-txt"><b>${esc(c.matiere)}</b><small>${dateLisible(c.date)}</small></span><span class="note-pill">${c.note === null ? "Noter" : `${c.note}/20`}</span></button>`)
+          .join("")}</div></section>`
+      : ""
+  }`;
+}
+
+// ---------- Calendrier intégré (plus fiable que le sélecteur natif dans l'appli) ----------
+function calendrier(el, valeurInitiale, onChange) {
+  let choisie = valeurInitiale;
+  const debutMois = (isoDate) => {
+    const d = new Date(isoDate + "T12:00");
+    d.setDate(1);
+    return d;
+  };
+  let mois = debutMois(choisie);
+  const auj = ctrl.aujourdhui();
+  const raccourcis = [["Demain", 1], ["Dans 3 jours", 3], ["Dans 1 semaine", 7], ["Dans 2 semaines", 14]];
+  const dessiner = () => {
+    const y = mois.getFullYear();
+    const m = mois.getMonth();
+    const decalage = (new Date(y, m, 1).getDay() + 6) % 7; // lundi en premier
+    const nb = new Date(y, m + 1, 0).getDate();
+    const cases = Array.from({ length: decalage }, () => "<span></span>");
+    for (let j = 1; j <= nb; j++) {
+      const d = ctrl.iso(new Date(y, m, j));
+      cases.push(`<button type="button" data-d="${d}" class="${d === choisie ? "on" : ""} ${d === auj ? "auj" : ""}" ${d < auj ? "disabled" : ""}>${j}</button>`);
+    }
+    const moisPrecedentPossible = new Date(y, m, 1) > new Date(auj + "T12:00");
+    el.innerHTML = `
+      <div class="dp-raccourcis">${raccourcis.map(([l, n]) => `<button type="button" class="chip ${ctrl.iso(Date.now() + n * 864e5) === choisie ? "on" : ""}" data-plus="${n}">${l}</button>`).join("")}</div>
+      <div class="dp-mois"><button type="button" data-nav="-1" aria-label="Mois précédent" ${moisPrecedentPossible ? "" : "disabled"}>${ic("retour", 18)}</button>
+        <b>${mois.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</b>
+        <button type="button" data-nav="1" aria-label="Mois suivant">${ic("suite", 18)}</button></div>
+      <div class="dp-grille">${["L", "M", "M", "J", "V", "S", "D"].map((j) => `<small>${j}</small>`).join("")}${cases.join("")}</div>
+      <p class="dp-choix">${ic("calendrier", 16)} ${dateLisible(choisie)}</p>`;
+  };
+  el.onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b || b.disabled) return;
+    e.preventDefault();
+    if (b.dataset.nav) mois.setMonth(mois.getMonth() + Number(b.dataset.nav));
+    else if (b.dataset.d) choisie = b.dataset.d;
+    else if (b.dataset.plus) {
+      choisie = ctrl.iso(Date.now() + Number(b.dataset.plus) * 864e5);
+      mois = debutMois(choisie);
+    }
+    if (b.dataset.d || b.dataset.plus) onChange?.(choisie);
+    dessiner();
+  };
+  dessiner();
+  return { valeur: () => choisie };
+}
+
+// Créer un contrôle, ou modifier celui qui existe (date, chapitres, précision).
+function ouvrirNouveauControle(matiere, existant = null) {
   const fichesDe = (m) => store.getFiches().filter((f) => f.matiere === m);
-  const demain = ctrl.iso(Date.now() + 864e5);
-  const listeChapitres = (m) => {
+  const listeChapitres = (m, coches) => {
     const chaps = [...new Set(fichesDe(m).map((f) => f.chapitre || "Sans chapitre"))];
     return chaps.length
-      ? chaps.map((c) => `<label class="check"><input type="checkbox" value="${esc(c)}" checked> ${esc(c)}</label>`).join("")
-      : `<p class="hint">Pas encore de fiche dans cette matière : le planning proposera les cartes et un sujet dès que tu auras scanné tes cours.</p>`;
+      ? chaps.map((c) => `<label class="check"><input type="checkbox" value="${esc(c)}" ${!coches || !coches.length || coches.includes(c) ? "checked" : ""}> ${esc(c)}</label>`).join("")
+      : `<p class="hint">Pas encore de fiche dans cette matière : le planning proposera les cartes et des sujets dès que tu auras scanné tes cours.</p>`;
   };
-  const choisie = matiere || getMatieres().find((m) => fichesDe(m.nom).length)?.nom || getMatieres()[0].nom;
+  const choisie = existant?.matiere || matiere || getMatieres().find((m) => fichesDe(m.nom).length)?.nom || getMatieres()[0].nom;
   modale(
-    `<h3>📅 J'ai un contrôle</h3>
-    <label class="field">Matière<select id="nc-matiere">${getMatieres().map((m) => `<option value="${esc(m.nom)}" ${m.nom === choisie ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("")}</select></label>
-    <label class="field">Date du contrôle<input id="nc-date" type="date" min="${ctrl.aujourdhui()}" value="${ctrl.iso(Date.now() + 4 * 864e5)}"></label>
-    <div class="field">Chapitres au programme<div id="nc-chapitres" class="checks">${listeChapitres(choisie)}</div></div>
-    <label class="field">Précision (facultatif)<input id="nc-titre" placeholder="ex : interro sur la partie 2" maxlength="40"></label>
-    <div class="row"><button class="btn secondary" id="nc-annuler">Annuler</button><button class="btn primary" id="nc-ok">Créer mon planning</button></div>`,
+    `<h3>${existant ? "Modifier le contrôle" : "Nouveau contrôle"}</h3>
+    <label class="field">Matière<select id="nc-matiere">${getMatieres().map((m) => `<option value="${esc(m.nom)}" ${m.nom === choisie ? "selected" : ""}>${esc(m.nom)}</option>`).join("")}</select></label>
+    <div class="field">Date du contrôle<div id="nc-date" class="datepick"></div></div>
+    <div class="field">Chapitres au programme<div id="nc-chapitres" class="checks">${listeChapitres(choisie, existant?.chapitres)}</div></div>
+    <label class="field">Précision (facultatif)<input id="nc-titre" placeholder="ex : interro sur la partie 2" maxlength="40" value="${esc(existant?.titre || "")}"></label>
+    <div class="row"><button class="btn secondary" id="nc-annuler">Annuler</button><button class="btn primary" id="nc-ok">${existant ? "Enregistrer" : "Créer mon planning"}</button></div>`,
     (box, fermer) => {
-      const $ = (s) => box.querySelector(s);
+      const $ = (sel) => box.querySelector(sel);
+      const cal = calendrier($("#nc-date"), existant?.date && existant.date >= ctrl.aujourdhui() ? existant.date : ctrl.iso(Date.now() + 7 * 864e5));
       $("#nc-matiere").onchange = (e) => ($("#nc-chapitres").innerHTML = listeChapitres(e.target.value));
       $("#nc-annuler").onclick = fermer;
       $("#nc-ok").onclick = async () => {
-        const date = $("#nc-date").value;
-        if (!date || date < ctrl.aujourdhui()) return toast("Choisis une date à venir 📅");
-        const c = ctrl.nouveauControle({
+        const date = cal.valeur();
+        if (!date || date < ctrl.aujourdhui()) return toast("Choisis une date à venir");
+        const donnees = {
           matiere: $("#nc-matiere").value,
           date,
           chapitres: [...box.querySelectorAll("#nc-chapitres input:checked")].map((i) => i.value),
           titre: $("#nc-titre").value.trim(),
-        });
+        };
+        let c;
+        if (existant) {
+          c = ctrl.getControle(existant.id);
+          c.matiere = donnees.matiere;
+          ctrl.modifierControle(c, donnees);
+        } else c = ctrl.nouveauControle(donnees);
         fermer();
-        const origine = ui.view === "matiere" ? "matiere" : "home";
-        go({ view: "controle", controleId: c.id, retourControle: origine });
+        if (existant) {
+          toast("Contrôle modifié");
+          render();
+        } else go({ view: "controle", controleId: c.id, retourControle: ui.view === "matiere" ? "matiere" : ui.view === "planning" ? "planning" : "home" });
         const ok = await ctrl.programmerRappels(c, c.matiere);
-        if (Capacitor.isNativePlatform()) toast(ok ? "Rappel chaque jour à 18 h ⏰" : "Rappels refusés : autorise les notifications de Révizz dans les réglages d'Android.");
+        if (Capacitor.isNativePlatform() && !existant) toast(ok ? "Rappel chaque jour à 18 h" : "Rappels refusés : autorise les notifications de Révizz dans les réglages d'Android.");
       };
-      void demain;
+    }
+  );
+}
+
+// Ajouter une tâche à un jour du planning.
+function ouvrirAjoutTache(c, date) {
+  const fiches = ctrl.fichesDuControle(c);
+  const types = [
+    ["qcm", "QCM"],
+    ["sujet", "Sujet blanc"],
+    ["relire", "Relire une fiche"],
+    ["cartes", "Cartes"],
+    ["test", "Test final du chapitre"],
+  ];
+  modale(
+    `<h3>Ajouter pour ${libelleJour(date).toLowerCase()}</h3>
+    <div class="seg wrap" id="at-type">${types.map(([v, l], i) => `<button type="button" data-v="${v}" class="${i ? "" : "on"}">${ic(ICONE_TACHE[v], 16)} ${l}</button>`).join("")}</div>
+    <label class="field" id="at-champ-fiche">Fiche
+      <select id="at-fiche">${fiches.map((f) => `<option value="${f.id}">${esc(f.titre)}</option>`).join("")}</select>
+    </label>
+    ${fiches.length ? "" : `<p class="hint">Aucune fiche dans ce contrôle : seules les cartes peuvent être ajoutées.</p>`}
+    <div class="row"><button class="btn secondary" id="at-annuler">Annuler</button><button class="btn primary" id="at-ok">Ajouter</button></div>`,
+    (box, fermer) => {
+      let type = "qcm";
+      const champ = box.querySelector("#at-champ-fiche");
+      box.querySelectorAll("#at-type button").forEach(
+        (b) =>
+          (b.onclick = () => {
+            type = b.dataset.v;
+            box.querySelectorAll("#at-type button").forEach((x) => x.classList.toggle("on", x === b));
+            champ.hidden = type === "cartes" || !fiches.length;
+          })
+      );
+      champ.hidden = !fiches.length;
+      box.querySelector("#at-annuler").onclick = fermer;
+      box.querySelector("#at-ok").onclick = () => {
+        const fiche = fiches.find((f) => f.id === box.querySelector("#at-fiche")?.value);
+        if (type !== "cartes" && !fiche) return toast("Choisis une fiche");
+        ctrl.ajouterTache(ctrl.getControle(c.id), date, type, fiche);
+        fermer();
+        render();
+      };
     }
   );
 }
@@ -1642,47 +1834,58 @@ function ouvrirNouveauControle(matiere) {
 function controleView() {
   const c = ctrl.getControle(ui.controleId);
   if (!c) {
-    ui.view = "home";
-    return home();
+    ui.view = "planning";
+    return planning();
   }
   const r = ctrl.joursRestants(c);
-  const head = `<header class="top" style="--c:${couleur(c.matiere)}"><button class="icon" data-back>←</button>
-    <div class="title"><small>${emoji(c.matiere)} ${esc(c.matiere)}${c.titre ? ` · ${esc(c.titre)}` : ""}</small>Contrôle du ${dateLisible(c.date)}</div>
-    <button class="icon" id="ctrl-suppr" aria-label="Supprimer ce contrôle">🗑️</button></header>`;
+  const head = `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button>
+    <div class="title">Contrôle de ${esc(c.matiere)}</div>
+    <button class="icon" id="ctrl-suppr" aria-label="Supprimer ce contrôle">${ic("supprimer")}</button></header>`;
   if (r < 0) {
     return `${head}
     <div class="card center">
-      <div class="big-num">📝</div>
-      <p>Le contrôle est passé. Quelle note as-tu eue ?</p>
+      <p class="sub">${dateLisible(c.date)}</p>
+      <h2>Quelle note as-tu eue ?</h2>
       <div class="note-row"><input id="ctrl-note" type="number" min="0" max="20" step="0.5" inputmode="decimal" value="${c.note ?? ""}" placeholder="—"><span>/20</span></div>
       <button class="btn primary big-btn" id="ctrl-note-ok">Enregistrer ma note</button>
-      ${c.note !== null ? `<p class="aa-msg">${humeur(c.note)} ${c.note}/20 enregistré</p>` : ""}
+      ${c.note !== null ? `<p class="aa-msg">${c.note}/20 · ${humeur(c.note)}</p>` : ""}
     </div>`;
   }
   const plan = ctrl.planning(c);
   const total = plan.reduce((n, j) => n + j.taches.length, 0);
   const faites = plan.reduce((n, j) => n + j.taches.filter((t) => c.faits[t.id]).length, 0);
   return `${head}
-  <div class="card center rebours">
-    <div class="big-num">${r === 0 ? "Jour J" : `J-${r}`}</div>
-    <p>${compteARebours(c)} · ${faites}/${total} tâche${total > 1 ? "s" : ""} faite${total > 1 ? "s" : ""}</p>
-    <div class="bar wide"><i style="width:${total ? Math.round((faites / total) * 100) : 0}%"></i></div>
-    ${Capacitor.isNativePlatform() ? `<p class="hint">⏰ Rappel chaque jour à 18 h.</p>` : ""}
+  <div class="resume-controle" style="--c:${couleur(c.matiere)}">
+    <div class="jx-grand">${r === 0 ? "Jour J" : `J-${r}`}</div>
+    <div class="rc-txt">
+      <b>${dateLisible(c.date)}</b>
+      <small>${c.titre ? `${esc(c.titre)} · ` : ""}${faites}/${total} tâche${total > 1 ? "s" : ""} faite${total > 1 ? "s" : ""}</small>
+      <span class="jauge"><i style="width:${total ? Math.round((faites / total) * 100) : 0}%;background:${couleur(c.matiere)}"></i></span>
+    </div>
   </div>
+  <button class="btn secondary big-btn" id="ctrl-modifier">${ic("calendrier", 18)} Changer la date ou les chapitres</button>
+  ${Capacitor.isNativePlatform() ? `<p class="hint center">${ic("rappel", 14)} Rappel chaque jour vers 18 h</p>` : ""}
   ${plan
     .map(
-      (j) => `<h3 class="${j.date === ctrl.aujourdhui() ? "jour-actuel" : ""}">${libelleJour(j.date)}</h3>
-      <div class="taches">${j.taches
-        .map(
-          (t) => `<div class="tache ${c.faits[t.id] ? "faite" : ""}">
-            <button class="coche" data-coche="${esc(t.id)}" aria-label="${c.faits[t.id] ? "Marquer à faire" : "Marquer comme faite"}">${c.faits[t.id] ? "✓" : ""}</button>
-            <button class="tache-txt" data-tache="${esc(t.id)}">${esc(t.label)} <span>→</span></button>
+      (j) => `<section class="bloc jour ${j.date === ctrl.aujourdhui() ? "jour-actuel" : ""}">
+      <div class="bloc-titre"><h2>${libelleJour(j.date)}</h2><button class="lien" data-ajout-jour="${j.date}">${ic("plus", 16)} Ajouter</button></div>
+      <div class="taches">${
+        j.taches.length
+          ? j.taches
+              .map(
+                (t) => `<div class="tache ${c.faits[t.id] ? "faite" : ""}">
+            <button class="coche" data-coche="${esc(t.id)}" aria-label="${c.faits[t.id] ? "Marquer à faire" : "Marquer comme faite"}">${c.faits[t.id] ? ic("ok", 16) : ""}</button>
+            <button class="tache-txt" data-tache="${esc(t.id)}">${ic(ICONE_TACHE[t.type] || "taches", 18, "t-ic")}<span>${esc(t.label)}</span></button>
+            <button class="tache-x" data-retirer-tache="${esc(t.id)}" aria-label="Retirer cette tâche">${ic("fermer", 16)}</button>
           </div>`
-        )
-        .join("")}</div>`
+              )
+              .join("")
+          : `<p class="hint">Journée libre. Ajoute un QCM ou un sujet blanc si tu veux.</p>`
+      }</div>
+    </section>`
     )
     .join("")}
-  <p class="hint center">Touche une tâche pour la faire : elle est cochée automatiquement.</p>`;
+  <p class="hint center">Touche une tâche pour la faire : elle se coche toute seule.</p>`;
 }
 afterRender.controle = () => {
   const c = ctrl.getControle(ui.controleId);
@@ -1691,18 +1894,27 @@ afterRender.controle = () => {
   $("ctrl-suppr").onclick = async () => {
     if (!(await confirmer("Supprimer ce contrôle et son planning ?"))) return;
     await ctrl.supprimerControle(c.id);
-    go({ view: ui.retourControle || "home" });
+    go({ view: ui.retourControle || "planning" });
   };
+  if ($("ctrl-modifier")) $("ctrl-modifier").onclick = () => ouvrirNouveauControle(c.matiere, c);
   if ($("ctrl-note-ok"))
     $("ctrl-note-ok").onclick = () => {
       const v = parseFloat(String($("ctrl-note").value).replace(",", "."));
-      if (isNaN(v) || v < 0 || v > 20) return toast("Une note entre 0 et 20 ✍️");
+      if (isNaN(v) || v < 0 || v > 20) return toast("Une note entre 0 et 20");
       c.note = v;
       ctrl.saveControle(c);
-      toast("Note enregistrée ✅");
+      toast("Note enregistrée");
       render();
     };
   const taches = Object.fromEntries(ctrl.planning(c).flatMap((j) => j.taches).map((t) => [t.id, t]));
+  document.querySelectorAll("[data-ajout-jour]").forEach((b) => (b.onclick = () => ouvrirAjoutTache(c, b.dataset.ajoutJour)));
+  document.querySelectorAll("[data-retirer-tache]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        ctrl.retirerTache(c, b.dataset.retirerTache);
+        render();
+      })
+  );
   document.querySelectorAll("[data-coche]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -1718,11 +1930,13 @@ afterRender.controle = () => {
         const a = t.action;
         if (a.vue === "fiche") {
           if (a.tab === "sujet") sujetType = "controle";
+          if (a.tab === "qcm") qcmNiveau = a.niveau || "moyen";
           go({ view: "fiche", ficheId: a.ficheId, tab: a.tab, retour: "controle" });
         } else if (a.vue === "revision") {
           sessionJour = null;
           go({ view: "revision", revMatiere: c.matiere, retour: "controle" });
-        } else go({ view: "matiere", matiere: c.matiere });
+        } else if (a.vue === "chapitre") go({ view: "chapitre", matiere: c.matiere, chapitre: a.chapitre });
+        else go({ view: "matiere", matiere: c.matiere });
       })
   );
 };
@@ -1732,7 +1946,7 @@ app.addEventListener("click", (e) => {
   const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage],[data-ajout-matiere],[data-retirer],[data-chapitre],[data-test],[data-nouveau-controle],[data-controle]");
   if (!t) return;
   // D'où vient-on ? (pour que « ← » ramène à la matière ou à l'accueil)
-  const origine = ui.view === "matiere" ? "matiere" : "home";
+  const origine = ["matiere", "matieres", "planning", "chapitre"].includes(ui.view) ? ui.view : "home";
   if (t.dataset.go) go({ view: t.dataset.go, ...(t.dataset.go === "home" ? { matiere: null } : {}) });
   else if (t.dataset.back !== undefined) back();
   else if (t.dataset.open) {

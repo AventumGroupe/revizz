@@ -51,7 +51,7 @@ En 1799, le général **Napoléon Bonaparte** prend le pouvoir par un coup d'Ét
 - **1793-1794 : la Terreur**, Robespierre fait arrêter et exécuter les « suspects ».
 - **1799** : Bonaparte prend le pouvoir (coup d'État du **18 brumaire**).
 
-> 💬 Phrase à savoir dire : « La Révolution remplace la monarchie absolue de droit divin par un pouvoir qui vient de la nation. »`,
+> Phrase à savoir dire : « La Révolution remplace la monarchie absolue de droit divin par un pouvoir qui vient de la nation. »`,
   points_cles: [
     "La Révolution commence en 1789 à cause d'une crise financière et des inégalités entre les trois ordres.",
     "Le 14 juillet 1789, la prise de la Bastille devient le symbole de la fin de l'absolutisme.",
@@ -151,7 +151,7 @@ En une quinzaine de lignes, raconte comment la France passe de la monarchie abso
 - **1792** : chute de la royauté le 21 septembre, la République est proclamée.
 - **Conclusion** : en trois ans, le pouvoir passe du roi à la nation.
 
-⚠️ *Erreur fréquente : confondre la prise de la Bastille (1789) et la proclamation de la République (1792).*`,
+ *Erreur fréquente : confondre la prise de la Bastille (1789) et la proclamation de la République (1792).*`,
   motsCles: ["1789", "bastille", "jeu de paume", "privilège", "ddhc", "déclaration", "constitution", "1791", "varennes", "1792", "république", "nation", "égalité", "tiers"],
 };
 
@@ -266,7 +266,7 @@ Le plus grand côté est RT : RT² = 841. RS² + ST² = 400 + 441 = 841. L'égal
 ## Exercice 4
 d² = 80² + 60² = 6 400 + 3 600 = 10 000, donc **d = 100 cm**.
 
-⚠️ *Erreur fréquente : additionner les longueurs au lieu des carrés.*`,
+ *Erreur fréquente : additionner les longueurs au lieu des carrés.*`,
   motsCles: ["pythagore", "rectangle", "225", "15", "réciproque", "841", "100", "²"],
 };
 
@@ -327,13 +327,13 @@ export async function corrigerCopie(fiche, _sujet, reponse, onProgress) {
   const note = Math.max(3, Math.min(19, 4 + trouves.length * 1.5 + longueur));
   const texte = `## Note : ${Math.round(note)}/20
 
-### ✅ Ce qui est réussi
+### Ce qui est réussi
 ${trouves.length ? trouves.map((m) => `- Tu utilises bien la notion **${m}**.`).join("\n") : "- Tu as osé te lancer, c'est le plus important !"}
 
-### ❌ Ce qui manque
+### Ce qui manque
 ${manquants.slice(0, 5).map((m) => `- Il manque **${m}** : regarde le corrigé.`).join("\n") || "- Presque rien, bravo !"}
 
-### 💡 3 conseils
+### 3 conseils
 1. Commence chaque réponse par une phrase qui reprend la question.
 2. Cite des dates ou des chiffres précis : ils rapportent des points.
 3. Relis ta fiche « Résumé » puis refais le sujet demain sans regarder.
@@ -352,17 +352,17 @@ export async function plusDeFlashcards(fiche, existantes, onProgress) {
 
 const REPONSES = [
   [/10 ans|simple|comprends pas|compris/i, (f) => f.demoKey === "maths"
-    ? "Imagine une **échelle posée contre un mur** 🪜. Le mur et le sol forment un angle droit. L'échelle, c'est l'**hypoténuse**, le côté le plus long.\n\nPythagore a découvert une règle magique : si tu fais **carré du mur + carré du sol**, tu obtiens **le carré de l'échelle**.\n\n👉 À toi : si le mur fait 3 et le sol 4, combien fait l'échelle ?"
-    : "Imagine une classe où **le délégué décide de tout seul**, sans demander l'avis des élèves, et où certains élèves ne font jamais leurs devoirs mais ont les meilleures notes 😤. C'était un peu la France avant 1789 : le **roi** décidait de tout et les **nobles** avaient des **privilèges**.\n\nEn 1789, le peuple dit « stop ! » : il veut que **tout le monde ait les mêmes droits** et que les lois soient décidées par des représentants élus.\n\n👉 À toi : comment s'appellent ces avantages injustes des nobles ?"],
+    ? "Imagine une **échelle posée contre un mur**. Le mur et le sol forment un angle droit. L'échelle, c'est l'**hypoténuse**, le côté le plus long.\n\nPythagore a découvert une règle magique : si tu fais **carré du mur + carré du sol**, tu obtiens **le carré de l'échelle**.\n\n À toi : si le mur fait 3 et le sol 4, combien fait l'échelle ?"
+    : "Imagine une classe où **le délégué décide de tout seul**, sans demander l'avis des élèves, et où certains élèves ne font jamais leurs devoirs mais ont les meilleures notes. C'était un peu la France avant 1789 : le **roi** décidait de tout et les **nobles** avaient des **privilèges**.\n\nEn 1789, le peuple dit « stop ! » : il veut que **tout le monde ait les mêmes droits** et que les lois soient décidées par des représentants élus.\n\n À toi : comment s'appellent ces avantages injustes des nobles ?"],
   [/3 choses|important|essentiel|retenir/i, (f) => f.demoKey === "maths"
-    ? "Les 3 choses les plus importantes :\n1. L'**hypoténuse** est en face de l'angle droit (le plus grand côté).\n2. **BC² = AB² + AC²** quand le triangle est rectangle en A.\n3. La **réciproque** sert à prouver qu'un triangle est rectangle.\n\n👉 Question : dans un triangle rectangle en E, quelle est l'hypoténuse de EFG ?"
-    : "Les 3 choses les plus importantes :\n1. **14 juillet 1789** : prise de la Bastille, début symbolique de la Révolution.\n2. **26 août 1789** : la **DDHC** affirme la liberté et l'égalité en droits.\n3. **21 septembre 1792** : la royauté est abolie, la **République** commence.\n\n👉 Question : que signifie DDHC ?"],
+    ? "Les 3 choses les plus importantes :\n1. L'**hypoténuse** est en face de l'angle droit (le plus grand côté).\n2. **BC² = AB² + AC²** quand le triangle est rectangle en A.\n3. La **réciproque** sert à prouver qu'un triangle est rectangle.\n\n Question : dans un triangle rectangle en E, quelle est l'hypoténuse de EFG ?"
+    : "Les 3 choses les plus importantes :\n1. **14 juillet 1789** : prise de la Bastille, début symbolique de la Révolution.\n2. **26 août 1789** : la **DDHC** affirme la liberté et l'égalité en droits.\n3. **21 septembre 1792** : la royauté est abolie, la **République** commence.\n\n Question : que signifie DDHC ?"],
   [/exemple|concret/i, (f) => f.demoKey === "maths"
-    ? "Un exemple concret : ta télé 📺 ! Un écran de **80 cm de large et 60 cm de haut** : sa diagonale vaut √(80² + 60²) = √10 000 = **100 cm**. C'est pour ça qu'on parle de « pouces » : c'est la diagonale qu'on mesure !"
+    ? "Un exemple concret : ta télé ! Un écran de **80 cm de large et 60 cm de haut** : sa diagonale vaut √(80² + 60²) = √10 000 = **100 cm**. C'est pour ça qu'on parle de « pouces » : c'est la diagonale qu'on mesure !"
     : "Exemple concret : avant 1789, un paysan payait la **taille** (un impôt) alors que le noble, son voisin, en était **exempté**. C'est ça un **privilège**. La nuit du **4 août 1789**, ces privilèges sont abolis : tout le monde doit payer selon ses moyens."],
   [/question|vérifie|teste|interroge/i, (f) => f.demoKey === "maths"
-    ? "Allez, à toi ! 🎯\n\nUn triangle a pour côtés **5 cm, 12 cm et 13 cm**. Est-il rectangle ? Explique comment tu fais."
-    : "Allez, à toi ! 🎯\n\n**Remets dans l'ordre** : République, prise de la Bastille, DDHC, Terreur."],
+    ? "Allez, à toi !\n\nUn triangle a pour côtés **5 cm, 12 cm et 13 cm**. Est-il rectangle ? Explique comment tu fais."
+    : "Allez, à toi !\n\n**Remets dans l'ordre** : République, prise de la Bastille, DDHC, Terreur."],
 ];
 export async function discuter(fiche, history, onProgress) {
   const q = history[history.length - 1].content;
@@ -385,7 +385,7 @@ export async function miniFiche(fiche, connexe, onProgress) {
 - **Ce qu'il faut savoir :** l'essentiel tient en 3 ou 4 idées, avec les mots clés en gras.
 - **Un exemple :** un cas concret pour fixer la notion.
 
-🔗 **Lien avec ton cours :** ${connexe.pourquoi}
+ **Lien avec ton cours :** ${connexe.pourquoi}
 
 *Avec une clé ou le code famille, Claude rédige une vraie mini-fiche sur ce sujet.*`;
   return simuler(texte, onProgress, 1500);

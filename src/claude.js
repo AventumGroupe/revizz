@@ -59,7 +59,7 @@ function consignes() {
     "Tutoie l'élève. Phrases claires, adaptées à son niveau, vocabulaire des programmes de l'Éducation nationale.",
     "Reste fidèle au cours fourni ; n'invente pas de notions absentes, sauf pour compléter une explication de façon exacte.",
     "Formules en texte simple avec symboles Unicode (x², √, π, ≤, →, H₂O), jamais en LaTeX.",
-    "Markdown : titres courts (##), listes, **gras** pour les mots importants. Sois concis : pas de répétition ni de formule de politesse.",
+    "Markdown : titres courts (##), listes, **gras** pour les mots importants. Sois concis : pas de répétition, pas de formule de politesse, pas d'emoji.",
   ].join("\n");
 }
 

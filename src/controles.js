@@ -51,48 +51,99 @@ const fichesDu = (c) =>
 
 /**
  * Planning : d'aujourd'hui à la veille du contrôle.
- * - Tous les jours : les cartes à revoir de la matière.
- * - D'abord on relit chaque fiche, ensuite un QCM par fiche, répartis sur les jours.
- * - La veille : un sujet d'entraînement type contrôle et la relecture des points clés.
- * - Le jour J (ou si le contrôle est aujourd'hui) : relecture rapide et cartes.
+ * - Tous les jours : les cartes à revoir.
+ * - Les premiers jours : relire chaque fiche ; à partir du 2e jour : un QCM par jour (fiches en alternance).
+ * - Préparation longue (6 jours ou plus) : un sujet blanc à mi-parcours.
+ * - La veille : un sujet blanc type contrôle, un QCM bilan difficile et la relecture des points clés.
+ * - Le jour J : relecture rapide et cartes.
+ * L'élève peut retirer des tâches (c.retires) et en ajouter (c.extras, par jour).
  */
-export function planning(c) {
+function planningDeBase(c) {
   const fiches = fichesDu(c);
   const reste = joursRestants(c);
   if (reste < 0) return [];
   const t = (date, type, f, label, action) => ({ id: `${date}|${type}|${f?.id || "tout"}`, type, label, action });
+  const versFiche = (f, tab) => ({ vue: "fiche", ficheId: f.id, tab });
   const jours = [];
   for (let k = 0; k < Math.max(reste, 1); k++) jours.push(iso(versDate(aujourdhui()).getTime() + k * JOUR));
-  const n = jours.length;
   const plan = jours.map((date) => ({ date, taches: [] }));
-
   if (reste === 0) {
-    // Contrôle aujourd'hui : l'essentiel.
     const d = plan[0].date;
-    for (const f of fiches) plan[0].taches.push(t(d, "relire", f, `Relire les points clés : ${f.titre}`, { vue: "fiche", ficheId: f.id, tab: "resume" }));
+    for (const f of fiches) plan[0].taches.push(t(d, "relire", f, `Relire les points clés : ${f.titre}`, versFiche(f, "resume")));
     plan[0].taches.push(t(d, "cartes", null, "Cartes à revoir (5 min)", { vue: "revision" }));
     return plan;
   }
-
-  // Lectures puis QCM, répartis sur les jours avant la veille (ou sur le seul jour disponible).
-  const sequence = [
-    ...fiches.map((f) => ({ type: "relire", f, label: `Relire la fiche : ${f.titre}`, action: { vue: "fiche", ficheId: f.id, tab: "resume" } })),
-    ...fiches.map((f) => ({ type: "qcm", f, label: `QCM : ${f.titre}`, action: { vue: "fiche", ficheId: f.id, tab: "qcm" } })),
-  ];
-  const joursTravail = n > 1 ? n - 1 : 1;
-  sequence.forEach((s, i) => {
-    const k = Math.min(joursTravail - 1, Math.floor((i * joursTravail) / Math.max(sequence.length, 1)));
-    plan[k].taches.push(t(plan[k].date, s.type, s.f, s.label, s.action));
+  const n = plan.length;
+  const travail = n > 1 ? n - 1 : 1; // jours avant la veille
+  // Relectures réparties sur les premiers jours.
+  fiches.forEach((f, i) => {
+    const k = Math.min(travail - 1, Math.floor((i * travail) / fiches.length));
+    plan[k].taches.push(t(plan[k].date, "relire", f, `Relire la fiche : ${f.titre}`, versFiche(f, "resume")));
   });
+  // Un QCM par jour à partir du 2e jour de travail (ou dès le 1er s'il n'y en a qu'un), fiches en alternance.
+  if (fiches.length)
+    for (let k = travail > 1 ? 1 : 0; k < travail; k++) {
+      const f = fiches[(k - 1 + fiches.length) % fiches.length];
+      plan[k].taches.push(t(plan[k].date, "qcm", f, `QCM : ${f.titre}`, versFiche(f, "qcm")));
+    }
+  // Sujet blanc à mi-parcours pour les longues préparations.
+  if (n >= 6 && fiches.length) {
+    const k = Math.floor(travail / 2);
+    const f = fiches[k % fiches.length];
+    plan[k].taches.push(t(plan[k].date, "sujet", f, `Sujet blanc : ${f.titre}`, versFiche(f, "sujet")));
+  }
   plan.forEach((p) => p.taches.push(t(p.date, "cartes", null, "Réviser les cartes à revoir", { vue: "revision" })));
-  // La veille : sujet blanc + relecture globale.
+  // La veille.
   const veille = plan[n - 1];
   if (fiches.length) {
-    veille.taches.push(t(veille.date, "sujet", fiches[0], "Sujet d'entraînement type contrôle", { vue: "fiche", ficheId: fiches[0].id, tab: "sujet" }));
-    if (n > 1) veille.taches.push(t(veille.date, "points", null, "Relire les points clés de toutes les fiches", { vue: "matiere" }));
+    veille.taches.push(t(veille.date, "sujet", fiches[0], "Sujet blanc type contrôle", versFiche(fiches[0], "sujet")));
+    if (n > 1) {
+      const f = fiches[fiches.length - 1];
+      veille.taches.push(t(veille.date, "qcm", f, `QCM bilan (difficile) : ${f.titre}`, { ...versFiche(f, "qcm"), niveau: "difficile" }));
+      veille.taches.push(t(veille.date, "points", null, "Relire les points clés de toutes les fiches", { vue: "matiere" }));
+    }
   }
   return plan;
 }
+
+const LIBELLES = { relire: "Relire la fiche", qcm: "QCM", sujet: "Sujet blanc", cartes: "Réviser les cartes à revoir", test: "Test final du chapitre" };
+/** Tâche ajoutée par l'élève. */
+export function ajouterTache(c, date, type, fiche) {
+  const tache = {
+    id: `${date}|x|${uid()}`,
+    type,
+    label: fiche && type !== "cartes" ? `${LIBELLES[type]} : ${fiche.titre}` : LIBELLES[type],
+    action:
+      type === "cartes" ? { vue: "revision" } :
+      type === "test" ? { vue: "chapitre", chapitre: fiche?.chapitre || "Sans chapitre" } :
+      { vue: "fiche", ficheId: fiche.id, tab: { relire: "resume", qcm: "qcm", sujet: "sujet" }[type] },
+  };
+  c.extras = c.extras || {};
+  (c.extras[date] ||= []).push(tache);
+  saveControle(c);
+}
+export function retirerTache(c, id) {
+  const date = id.split("|")[0];
+  if (c.extras?.[date]?.some((t) => t.id === id)) c.extras[date] = c.extras[date].filter((t) => t.id !== id);
+  else (c.retires ||= {})[id] = true;
+  delete c.faits[id];
+  saveControle(c);
+}
+export function planning(c) {
+  return planningDeBase(c).map((j) => ({
+    date: j.date,
+    taches: [...j.taches.filter((t) => !c.retires?.[t.id]), ...(c.extras?.[j.date] || [])],
+  }));
+}
+/** Change la date, les chapitres ou la précision d'un contrôle (les rappels sont reprogrammés par l'appelant). */
+export function modifierControle(c, { date, chapitres, titre }) {
+  if (date) c.date = date;
+  if (chapitres) c.chapitres = chapitres;
+  if (titre !== undefined) c.titre = titre;
+  saveControle(c);
+  return c;
+}
+export const fichesDuControle = fichesDu;
 
 /** Tâches du jour et combien sont faites. */
 export function duJour(c) {
