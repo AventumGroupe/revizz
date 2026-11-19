@@ -8,7 +8,8 @@ Application Android de révision : on prend en photo une fiche ou un cahier, et 
 - **📄 Sujets d'entraînement** : interro express, contrôle, sujet type Brevet ou Bac, oral. Chaque sujet a un corrigé caché, et l'élève peut écrire sa copie pour la faire **noter sur 20** avec des conseils.
 - **💬 Prof** : un professeur particulier qui répond aux questions sur le cours.
 
-- **🗂️ Classement par matière** : l'accueil montre une tuile par matière (icône, nombre de fiches, cartes à revoir). Dans une matière, les fiches sont rangées par chapitre, avec un bouton pour réviser les cartes de cette matière seulement. Au scan, on peut choisir la matière ou laisser Claude la détecter. Toucher le titre d'une fiche permet de changer sa matière, son chapitre ou son titre.
+- **🗂️ Mes matières** : l'appli démarre avec les matières de Seconde (Français, Mathématiques, Histoire-Géographie, EMC, SES, SVT, Physique-Chimie, SNT, Anglais, Espagnol, Italien). On en ajoute au fur et à mesure depuis un catalogue (Enseignement scientifique, Philosophie, HGGSP, NSI, HLP, LLCER…) ou en créant la sienne (nom, icône, couleur). Dans une matière, les fiches sont rangées par chapitre. Toucher le titre d'une fiche permet de changer sa matière, son chapitre ou son titre.
+- **📈 Progrès par chapitre** : au début d'un chapitre, un test de départ de 10 questions sur tout le chapitre mesure d'où l'on part. À la fin, le test final reprend les mêmes questions dans un autre ordre, sans nouvel appel à Claude. Deux grandes barres « Avant / Après » et une courbe (départ, QCM d'entraînement, test final, ligne de la moyenne) montrent les progrès.
 
 Les fiches restent sur le téléphone. Les photos ne sont pas conservées : seul le texte est gardé.
 
@@ -70,7 +71,7 @@ npm run android:apk    # compile l'APK (Android SDK requis), sortie : android/ap
 Structure :
 
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
-- `src/matieres.js` : liste des matières (icône, couleur) et rattachement des anciennes fiches.
+- `src/matieres.js` : catalogue des matières, « Mes matières » de l'élève, rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
 - `src/store.js` : stockage local, répétition espacée (boîtes de Leitner), série de jours.
 - `src/main.js` : les écrans.

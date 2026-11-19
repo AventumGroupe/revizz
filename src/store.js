@@ -24,7 +24,7 @@ function write(key, value) {
   }
 }
 
-const DEFAULT_SETTINGS = { apiKey: "", prenom: "", classe: "3e", model: "claude-opus-5-5", demo: false };
+const DEFAULT_SETTINGS = { apiKey: "", prenom: "", classe: "Seconde", model: "claude-opus-5-5", demo: false };
 export const getSettings = () => ({ ...DEFAULT_SETTINGS, ...read(KEY_SETTINGS, {}) });
 export const saveSettings = (s) => write(KEY_SETTINGS, { ...getSettings(), ...s });
 
@@ -93,3 +93,35 @@ export function enregistrerConso(usage) {
   write(KEY_CONSO, c);
 }
 export const resetConso = () => write(KEY_CONSO, { appels: 0, entree: 0, cache: 0, sortie: 0 });
+
+// Accès génériques (utilisés par matieres.js)
+export const lire = read;
+export const ecrire = write;
+
+// ---------- Progrès par chapitre : test de départ et test final ----------
+// { "Matière|Chapitre": { depart: {date, score, total, questions}, finals: [{date, score, total}], demo? } }
+const KEY_PROGRES = "revizz.progres";
+const cle = (matiere, chapitre) => `${matiere}|${chapitre || "Sans chapitre"}`;
+export const getProgres = (matiere, chapitre) => read(KEY_PROGRES, {})[cle(matiere, chapitre)] || { finals: [] };
+export function saveProgres(matiere, chapitre, data) {
+  const all = read(KEY_PROGRES, {});
+  all[cle(matiere, chapitre)] = data;
+  write(KEY_PROGRES, all);
+}
+// Quand un chapitre est renommé ou change de matière, ses résultats le suivent.
+export function deplacerProgres(ancienneMatiere, ancienChapitre, matiere, chapitre) {
+  const all = read(KEY_PROGRES, {});
+  const a = cle(ancienneMatiere, ancienChapitre);
+  const b = cle(matiere, chapitre);
+  if (a === b || !all[a] || all[b]) return;
+  all[b] = all[a];
+  delete all[a];
+  write(KEY_PROGRES, all);
+}
+export function supprimerProgresDemo() {
+  const all = read(KEY_PROGRES, {});
+  for (const k in all) if (all[k].demo) delete all[k];
+  write(KEY_PROGRES, all);
+}
+/** Note sur 20, arrondie. */
+export const sur20 = (score, total) => (total ? Math.round((score / total) * 20) : 0);

@@ -266,6 +266,9 @@ const contenu = (fiche) => CONTENUS[fiche.demoKey] || CONTENUS.histoire;
 
 // ---------- Fonctions qui imitent claude.js ----------
 
+// Questions du test de départ déjà fait dans la démo (pour montrer le graphique de progrès).
+export const questionsDepartDemo = () => QCM_HISTOIRE.filter((q) => q.n !== "difficile").slice(0, 10).map(({ n, ...q }) => q);
+
 export function ficheDeDepart() {
   return HISTOIRE;
 }

@@ -3,8 +3,8 @@ import { marked } from "marked";
 import { Capacitor } from "@capacitor/core";
 import * as store from "./store.js";
 import * as ai from "./claude.js";
-import { ficheDeDepart } from "./demo.js";
-import { MATIERES, NOMS_MATIERES, normaliserMatiere, couleur, emoji } from "./matieres.js";
+import { ficheDeDepart, questionsDepartDemo } from "./demo.js";
+import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, emoji } from "./matieres.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
 const DEMO_ONLY = import.meta.env.VITE_DEMO_ONLY === "1";
@@ -67,6 +67,8 @@ const go = (patch) => {
 };
 function back() {
   if (ui.view === "fiche" || ui.view === "scan" || ui.view === "revision") go({ view: ui.retour });
+  else if (ui.view === "chapitre") go({ view: "matiere" });
+  else if (ui.view === "test") go({ view: "chapitre" });
   else if (ui.view === "settings" || ui.view === "matiere") go({ view: "home", matiere: null });
 }
 
@@ -84,19 +86,32 @@ if (Capacitor.isNativePlatform()) {
 
 function entrerDemo() {
   store.saveSettings({ demo: true });
-  if (!store.getFiches().some((f) => f.demoKey)) store.saveFiche(nouvelleFiche(ficheDeDepart()));
+  if (!store.getFiches().some((f) => f.demoKey)) {
+    // Fiche d'exemple avec un test de départ et deux QCM déjà faits, pour montrer le graphique.
+    const f = nouvelleFiche(ficheDeDepart());
+    const J = 864e5;
+    const now = Date.now();
+    f.cree = now - 12 * J;
+    f.qcm = [
+      { date: now - 8 * J, score: 5, total: 10, niveau: "moyen" },
+      { date: now - 3 * J, score: 7, total: 10, niveau: "moyen" },
+    ];
+    store.saveFiche(f);
+    store.saveProgres(f.matiere, f.chapitre, { demo: true, depart: { date: now - 12 * J, score: 3, total: 10, questions: questionsDepartDemo() }, finals: [] });
+  }
   go({ view: "home" });
 }
 function quitterDemo() {
   store.saveSettings({ demo: false });
   store.getFiches().filter((f) => f.demoKey).forEach((f) => store.deleteFiche(f.id));
+  store.supprimerProgresDemo();
 }
 
 function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
   if (!s.apiKey && !s.demo && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, matiere: matiereView, scan, fiche: ficheView, settings, revision };
+  const views = { welcome, home, matiere: matiereView, chapitre: chapitreView, test: testView, scan, fiche: ficheView, settings, revision };
   app.innerHTML = views[ui.view]();
   afterRender[ui.view]?.();
 }
@@ -147,28 +162,83 @@ function home() {
   <button class="btn primary big-btn" data-scan="">📸 Scanner une fiche</button>
   ${dues ? `<button class="btn secondary big-btn" data-revision="">🃏 Révision du jour (${dues} cartes)</button>` : ""}
 
+  <h3>Mes matières</h3>
+  <div class="matieres">${grilleMatieres(fiches)}</div>
   ${
     fiches.length
-      ? `<h3>Mes matières</h3>
-         <div class="matieres">${grilleMatieres(fiches)}</div>
-         <h3>Vues récemment</h3>
+      ? `<h3>Vues récemment</h3>
          <div class="list">${recentes.map((f) => carteFiche(f, true)).join("")}</div>`
-      : `<div class="empty">Aucune fiche pour l'instant.<br>Commence par scanner ton premier cours !</div>`
+      : `<div class="empty">Aucune fiche pour l'instant.<br>Touche une matière ou scanne ton premier cours !</div>`
   }`;
 }
-// Une tuile par matière qui a au moins une fiche, dans l'ordre de la liste.
+// Une tuile par matière de « Mes matières » (« Autre » seulement si elle a des fiches), puis « Ajouter ».
 function grilleMatieres(fiches) {
-  return MATIERES.filter((m) => fiches.some((f) => f.matiere === m.nom))
+  const tuiles = getMatieres()
+    .filter((m) => m.nom !== "Autre" || fiches.some((f) => f.matiere === "Autre"))
     .map((m) => {
       const siennes = fiches.filter((f) => f.matiere === m.nom);
       const dues = siennes.reduce((n, f) => n + store.cartesDues(f).length, 0);
-      return `<button class="matiere-tile" data-matiere="${esc(m.nom)}" style="--c:${m.couleur}">
+      return `<button class="matiere-tile ${siennes.length ? "" : "vide"}" data-matiere="${esc(m.nom)}" style="--c:${m.couleur}">
         <span class="em">${m.emoji}</span>
         <b>${esc(m.nom)}</b>
-        <small>${siennes.length} fiche${siennes.length > 1 ? "s" : ""}${dues ? ` · ${dues} à revoir` : ""}</small>
+        <small>${siennes.length ? `${siennes.length} fiche${siennes.length > 1 ? "s" : ""}${dues ? ` · ${dues} à revoir` : ""}` : "Aucune fiche"}</small>
       </button>`;
-    })
-    .join("");
+    });
+  tuiles.push(`<button class="matiere-tile ajout" data-ajout-matiere><span class="em">➕</span><b>Ajouter une matière</b></button>`);
+  return tuiles.join("");
+}
+
+// Options d'un menu de matières (avec « Nouvelle matière… » à la fin).
+function optionsMatieres(choisie, avecAuto = false) {
+  return (
+    (avecAuto ? `<option value="">✨ Détecter automatiquement</option>` : "") +
+    getMatieres().map((m) => `<option value="${esc(m.nom)}" ${m.nom === choisie ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("") +
+    `<option value="__nouvelle__">➕ Nouvelle matière…</option>`
+  );
+}
+
+// Ajouter une matière : du catalogue (un geste) ou créée par l'élève.
+function ouvrirAjoutMatiere(apresAjout) {
+  const sugg = suggestions();
+  modale(
+    `<h3>Ajouter une matière</h3>
+    ${sugg.length ? `<p class="hint">Touche une matière pour l'ajouter :</p>
+    <div class="sugg-matieres">${sugg.map((m) => `<button class="chip" data-add="${esc(m.nom)}">${m.emoji} ${esc(m.nom)}</button>`).join("")}</div>` : ""}
+    <h3>Ou crée la tienne</h3>
+    <label class="field">Nom de la matière<input id="nm-nom" placeholder="ex : Option cinéma" maxlength="40"></label>
+    <div class="field">Icône<div class="picker" id="nm-emoji">${EMOJIS.map((e, i) => `<button class="pick ${i ? "" : "on"}" data-v="${e}" aria-label="Icône ${e}">${e}</button>`).join("")}</div></div>
+    <div class="field">Couleur<div class="picker" id="nm-couleur">${COULEURS.map((c, i) => `<button class="pick swatch ${i ? "" : "on"}" data-v="${c}" style="background:${c}" aria-label="Couleur ${i + 1}"></button>`).join("")}</div></div>
+    <div class="row"><button class="btn secondary" id="nm-annuler">Fermer</button><button class="btn primary" id="nm-ok">Créer</button></div>`,
+    (box, fermer) => {
+      const fini = (nom) => {
+        fermer();
+        toast(`${emoji(nom)} ${nom} ajoutée`);
+        apresAjout ? apresAjout(nom) : render();
+      };
+      box.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => fini(ajouterMatiere({ nom: b.dataset.add }))));
+      box.querySelectorAll(".picker").forEach((pk) =>
+        pk.querySelectorAll(".pick").forEach(
+          (b) =>
+            (b.onclick = () => {
+              pk.querySelectorAll(".pick").forEach((x) => x.classList.remove("on"));
+              b.classList.add("on");
+            })
+        )
+      );
+      box.querySelector("#nm-annuler").onclick = fermer;
+      box.querySelector("#nm-ok").onclick = () => {
+        const nom = box.querySelector("#nm-nom").value.trim();
+        if (!nom) return toast("Donne un nom à ta matière ✍️");
+        fini(
+          ajouterMatiere({
+            nom,
+            emoji: box.querySelector("#nm-emoji .on").dataset.v,
+            couleur: box.querySelector("#nm-couleur .on").dataset.v,
+          })
+        );
+      };
+    }
+  );
 }
 function carteFiche(f, avecMatiere = false) {
   const m = store.maitrise(f);
@@ -187,8 +257,18 @@ function matiereView() {
   const nom = ui.matiere;
   const fiches = store.getFiches().filter((f) => f.matiere === nom);
   if (!fiches.length) {
-    ui.view = "home";
-    return home();
+    return `
+    <header class="top" style="--c:${couleur(nom)}">
+      <button class="icon" data-go="home">←</button>
+      <div class="title"><small>Aucune fiche</small>${emoji(nom)} ${esc(nom)}</div>
+      <span></span>
+    </header>
+    <div class="card center">
+      <div class="big-num">${emoji(nom)}</div>
+      <p>Pas encore de fiche en ${esc(nom)}.<br>Scanne ton premier cours pour commencer.</p>
+    </div>
+    <button class="btn primary big-btn" data-scan="${esc(nom)}">📸 Ajouter une fiche de ${esc(nom)}</button>
+    ${nom !== "Autre" ? `<button class="btn ghost big-btn" data-retirer="${esc(nom)}">Retirer ${esc(nom)} de mes matières</button>` : ""}`;
   }
   const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
   // Regroupe par chapitre ; les chapitres sont triés par ordre alphabétique, les fiches par date.
@@ -205,7 +285,8 @@ function matiereView() {
   <button class="btn secondary big-btn" data-scan="${esc(nom)}">📸 Ajouter une fiche de ${esc(nom)}</button>
   ${groupes
     .map(
-      ([chap, liste]) => `<h3 class="chapitre">${esc(chap)}</h3>
+      ([chap, liste]) => `<div class="chap-head"><h3 class="chapitre">${esc(chap)}</h3>
+        <button class="pill-btn" data-chapitre="${esc(chap)}" data-m="${esc(nom)}">${resumeProgres(nom, chap)}</button></div>
       <div class="list">${liste.sort((a, b) => b.cree - a.cree).map((f) => carteFiche(f)).join("")}</div>`
     )
     .join("")}`;
@@ -234,10 +315,7 @@ function scan() {
   <input type="file" id="file-import" accept="image/*,application/pdf" multiple hidden>
   <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
   <label class="field">Matière
-    <select id="scan-matiere">
-      <option value="">✨ Détecter automatiquement</option>
-      ${MATIERES.map((m) => `<option value="${esc(m.nom)}" ${m.nom === scanMatiere ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("")}
-    </select>
+    <select id="scan-matiere">${optionsMatieres(scanMatiere, true)}</select>
   </label>
   <label class="field">Une précision pour Claude ? (facultatif)
     <input id="note" placeholder="ex : chapitre 3, contrôle vendredi sur la partie 2" value="${esc(scanNote)}">
@@ -248,7 +326,14 @@ function scan() {
 afterRender.scan = () => {
   const $ = (id) => document.getElementById(id);
   $("note").oninput = (e) => (scanNote = e.target.value);
-  $("scan-matiere").onchange = (e) => (scanMatiere = e.target.value);
+  $("scan-matiere").onchange = (e) => {
+    if (e.target.value !== "__nouvelle__") return (scanMatiere = e.target.value);
+    e.target.value = scanMatiere;
+    ouvrirAjoutMatiere((nom) => {
+      scanMatiere = nom;
+      render();
+    });
+  };
   $("btn-import").onclick = () => $("file-import").click();
   $("btn-photo").onclick = prendrePhoto;
   $("file-import").onchange = (e) => ajouterFichiers(e.target.files);
@@ -409,7 +494,7 @@ function editerFiche(f) {
   modale(
     `<h3>Classer la fiche</h3>
     <label class="field">Matière
-      <select id="ed-matiere">${MATIERES.map((m) => `<option value="${esc(m.nom)}" ${m.nom === f.matiere ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("")}</select>
+      <select id="ed-matiere">${optionsMatieres(f.matiere)}</select>
     </label>
     <label class="field">Chapitre
       <input id="ed-chapitre" list="ed-chapitres" value="${esc(f.chapitre || "")}" placeholder="ex : La Révolution française">
@@ -419,12 +504,26 @@ function editerFiche(f) {
     <div class="row"><button class="btn secondary" id="ed-annuler">Annuler</button><button class="btn primary" id="ed-ok">Enregistrer</button></div>`,
     (box, fermer) => {
       box.querySelector("#ed-annuler").onclick = fermer;
+      const sel = box.querySelector("#ed-matiere");
+      let valeur = sel.value;
+      sel.onchange = () => {
+        if (sel.value !== "__nouvelle__") return (valeur = sel.value);
+        sel.value = valeur;
+        ouvrirAjoutMatiere((nom) => {
+          valeur = nom;
+          sel.innerHTML = optionsMatieres(nom);
+        });
+      };
       box.querySelector("#ed-ok").onclick = () => {
         const fiche = store.getFiche(f.id);
-        fiche.matiere = box.querySelector("#ed-matiere").value;
+        const avant = { matiere: fiche.matiere, chapitre: fiche.chapitre };
+        fiche.matiere = valeur;
         fiche.chapitre = box.querySelector("#ed-chapitre").value.trim();
         fiche.titre = box.querySelector("#ed-titre").value.trim() || fiche.titre;
         store.saveFiche(fiche);
+        // Si plus aucune fiche ne reste dans l'ancien chapitre, ses résultats suivent la fiche.
+        if (!fichesDuChapitre(avant.matiere, avant.chapitre || "Sans chapitre").length)
+          store.deplacerProgres(avant.matiere, avant.chapitre, fiche.matiere, fiche.chapitre);
         fermer();
         if (ui.retour === "matiere") ui.matiere = fiche.matiere;
         toast("Fiche classée ✅");
@@ -436,7 +535,15 @@ function editerFiche(f) {
 
 // --- Résumé
 function tabResume(f) {
+  const chap = f.chapitre || "Sans chapitre";
+  const sansDepart = !store.getProgres(f.matiere, f.chapitre).depart;
   return `
+  ${
+    sansDepart
+      ? `<div class="depart-banner"><span>🎯 <b>Nouveau chapitre ?</b> Fais le test de départ de « ${esc(chap)} » avant de réviser : tu pourras mesurer tes progrès.</span>
+         <button class="btn secondary" data-chapitre="${esc(chap)}" data-m="${esc(f.matiere)}">Mes progrès</button></div>`
+      : ""
+  }
   <div class="md card">${md(f.resume)}</div>
   ${
     f.points_cles?.length
@@ -582,6 +689,14 @@ afterRender.revision = () =>
     go({ view: ui.retour });
   });
 
+// Mélange les questions et l'ordre des propositions (pour refaire un QCM sans appel à Claude).
+function melangerQCM(questions) {
+  return shuffle(questions).map((q) => {
+    const ordre = shuffle(q.choix.map((_, i) => i));
+    return { ...q, choix: ordre.map((i) => q.choix[i]), bonne_reponse: ordre.indexOf(q.bonne_reponse) };
+  });
+}
+
 // --- QCM
 let qcm = null; // { ficheId, questions, i, choisi, score, niveau }
 let qcmNiveau = "moyen";
@@ -665,11 +780,7 @@ function bindQCM(f) {
     };
   if ($("replay-qcm"))
     $("replay-qcm").onclick = () => {
-      const questions = shuffle(f.dernierQCM).map((q) => {
-        // Mélange aussi l'ordre des propositions.
-        const ordre = shuffle(q.choix.map((_, i) => i));
-        return { ...q, choix: ordre.map((i) => q.choix[i]), bonne_reponse: ordre.indexOf(q.bonne_reponse) };
-      });
+      const questions = melangerQCM(f.dernierQCM);
       qcm = { ficheId: f.id, questions, i: 0, choisi: null, score: 0, niveau: "rejoué", erreurs: [] };
       render();
     };
@@ -870,6 +981,14 @@ function settings() {
   ${DEMO_ONLY ? "" : `<button class="btn ghost big-btn" id="test">Tester la clé</button>`}
   ${s.demo && !DEMO_ONLY ? `<button class="btn ghost big-btn" id="quit-demo">Quitter la démo</button>` : ""}
   <div id="progress"></div>
+  <div class="card">
+    <h3>📚 Mes matières</h3>
+    <div class="mes-matieres">${getMatieres()
+      .filter((m) => m.nom !== "Autre")
+      .map((m) => `<span class="chip-m" style="--c:${m.couleur}">${m.emoji} ${esc(m.nom)}<button data-retirer="${esc(m.nom)}" aria-label="Retirer ${esc(m.nom)}">✕</button></span>`)
+      .join("")}</div>
+    <button class="btn secondary big-btn" data-ajout-matiere>➕ Ajouter une matière</button>
+  </div>
   ${consoHTML()}
   <p class="hint center">Révizz · tes fiches restent sur ce téléphone.</p>`;
 }
@@ -933,9 +1052,249 @@ afterRender.settings = () => {
   };
 };
 
+async function demanderRetrait(nom) {
+  const n = store.getFiches().filter((f) => f.matiere === nom).length;
+  if (n) return toast(`${nom} contient ${n} fiche${n > 1 ? "s" : ""} : déplace-les ou supprime-les d'abord.`);
+  if (!(await confirmer(`Retirer ${nom} de tes matières ?`, "Retirer"))) return;
+  retirerMatiere(nom);
+  if (ui.view === "matiere") go({ view: "home", matiere: null });
+  else render();
+}
+
+// ---------- Progrès d'un chapitre : test de départ → révisions → test final ----------
+const fichesDuChapitre = (m, c) => store.getFiches().filter((f) => f.matiere === m && (f.chapitre || "Sans chapitre") === c);
+// Toutes les fiches du chapitre réunies, pour générer un test sur l'ensemble du chapitre.
+function ficheChapitre(m, c) {
+  const fiches = fichesDuChapitre(m, c);
+  return {
+    titre: c,
+    matiere: m,
+    chapitre: c === "Sans chapitre" ? "" : c,
+    demoKey: fiches[0]?.demoKey,
+    transcription: fiches.map((f) => `## ${f.titre}\n${f.transcription}`).join("\n\n"),
+  };
+}
+const humeur = (n) => (n >= 16 ? "🤩" : n >= 12 ? "😃" : n >= 8 ? "🙂" : "😕");
+const noteDe = (r) => store.sur20(r.score, r.total);
+
+function resumeProgres(m, c) {
+  const p = store.getProgres(m, c);
+  if (!p.depart) return "🎯 Mesurer mes progrès";
+  const fin = p.finals?.at(-1);
+  return fin ? `📈 ${noteDe(p.depart)} → ${noteDe(fin)}/20` : `📈 Départ ${noteDe(p.depart)}/20`;
+}
+
+// Points du graphique : test de départ, QCM d'entraînement du chapitre, tests finals, dans l'ordre.
+function pointsDuChapitre(m, c) {
+  const p = store.getProgres(m, c);
+  const pts = [];
+  if (p.depart) pts.push({ date: p.depart.date, note: noteDe(p.depart), type: "depart" });
+  for (const q of fichesDuChapitre(m, c).flatMap((f) => f.qcm || [])) pts.push({ date: q.date, note: noteDe(q), type: "qcm" });
+  for (const f of p.finals || []) pts.push({ date: f.date, note: noteDe(f), type: "final" });
+  pts.sort((a, b) => a.date - b.date);
+  let k = 0;
+  for (const pt of pts) pt.label = pt.type === "depart" ? "Départ" : pt.type === "final" ? "Final" : `QCM ${++k}`;
+  return pts;
+}
+
+// Graphique en courbe, notes sur 20, avec la ligne de la moyenne.
+function graphique(points) {
+  const W = 320, H = 190, L = 30, R = 14, T = 18, B = 34;
+  const w = W - L - R, h = H - T - B;
+  const x = (i) => (points.length === 1 ? L + w / 2 : L + (i * w) / (points.length - 1));
+  const y = (n) => T + (1 - n / 20) * h;
+  const montrerLabels = points.length <= 8;
+  const grille = [0, 5, 10, 15, 20]
+    .map((v) => `<line class="g-grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="g-axe" x="${L - 6}" y="${y(v) + 3.5}" text-anchor="end">${v}</text>`)
+    .join("");
+  const ligne = points.map((pt, i) => `${x(i).toFixed(1)},${y(pt.note).toFixed(1)}`).join(" ");
+  const marques = points
+    .map(
+      (pt, i) => `<circle class="g-pt g-${pt.type}" cx="${x(i)}" cy="${y(pt.note)}" r="${pt.type === "qcm" ? 5 : 7}"/>
+      <text class="g-val" x="${x(i)}" y="${y(pt.note) - 11}" text-anchor="middle">${pt.note}</text>
+      ${montrerLabels || pt.type !== "qcm" ? `<text class="g-lab" x="${x(i)}" y="${H - 12}" text-anchor="middle">${pt.label}</text>` : ""}`
+    )
+    .join("");
+  return `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution des notes sur 20 : ${points.map((p) => `${p.label} ${p.note}`).join(", ")}">
+    ${grille}
+    <line class="g-moy" x1="${L}" x2="${W - R}" y1="${y(10)}" y2="${y(10)}"/>
+    ${points.length > 1 ? `<polyline class="g-line" points="${ligne}"/>` : ""}
+    ${marques}
+  </svg>`;
+}
+
+// Grandes barres « Avant / Après », lisibles d'un coup d'œil.
+function avantApres(p) {
+  const avant = noteDe(p.depart);
+  const fin = p.finals?.at(-1);
+  const apres = fin ? noteDe(fin) : null;
+  const barre = (note, cls, titre) => `
+    <div class="aa-col">
+      <div class="aa-note">${note === null ? "?" : `${note}<small>/20</small>`}</div>
+      <div class="aa-track"><div class="aa-bar ${cls}" style="height:${note === null ? 100 : Math.max(4, (note / 20) * 100)}%"></div></div>
+      <div class="aa-lab">${note === null ? "⏳" : humeur(note)} ${titre}</div>
+    </div>`;
+  let message = "Révise tes fiches et tes cartes, puis fais le test final pour voir tes progrès !";
+  if (apres !== null) {
+    const gain = apres - avant;
+    message =
+      gain >= 6 ? `+${gain} points : énorme progrès ! 🚀` :
+      gain >= 3 ? `+${gain} points : beau progrès ! 💪` :
+      gain > 0 ? `+${gain} point${gain > 1 ? "s" : ""} : tu progresses 👍` :
+      gain === 0 ? "Même note qu'au départ : refais un tour des cartes et réessaie." :
+      "Pas grave : revois les cartes à revoir, puis retente le test final.";
+  }
+  return `<div class="card aa">
+    <div class="aa-cols">${barre(avant, "avant", "Avant")}<div class="aa-fleche">→</div>${barre(apres, apres === null ? "attente" : "apres", "Après")}</div>
+    <p class="aa-msg">${message}</p>
+  </div>`;
+}
+
+function chapitreView() {
+  const m = ui.matiere;
+  const c = ui.chapitre;
+  const fiches = fichesDuChapitre(m, c);
+  const p = store.getProgres(m, c);
+  const pts = pointsDuChapitre(m, c);
+  const cartes = fiches.flatMap((f) => f.flashcards);
+  const maitrise = cartes.length ? Math.round(fiches.reduce((s, f) => s + store.maitrise(f) * f.flashcards.length, 0) / cartes.length) : 0;
+  return `
+  <header class="top" style="--c:${couleur(m)}">
+    <button class="icon" data-back>←</button>
+    <div class="title"><small>${emoji(m)} ${esc(m)} · Mes progrès</small>${esc(c)}</div>
+    <span></span>
+  </header>
+  ${
+    !p.depart
+      ? `<div class="card">
+          <h3>🎯 Test de départ</h3>
+          <p>Fais-le <b>au début du chapitre</b>, avant de réviser : il montre d'où tu pars. Une note basse est normale, c'est justement ce qu'on veut mesurer !</p>
+          <p class="hint">10 questions sur tout le chapitre. À la fin du chapitre, tu referas le même test pour voir tes progrès.</p>
+          <button class="btn primary big-btn" data-test="depart">Commencer le test de départ</button>
+          <div id="progress"></div>
+        </div>`
+      : `${avantApres(p)}
+        <div class="card">
+          <h3>📈 Ton parcours</h3>
+          ${graphique(pts)}
+          <div class="legende"><span><i class="g-depart"></i>Départ</span><span><i class="g-qcm"></i>QCM d'entraînement</span><span><i class="g-final"></i>Test final</span><span><i class="g-moy-l"></i>Moyenne (10/20)</span></div>
+          <div class="maitrise"><span>🃏 Cartes maîtrisées</span><div class="bar wide"><i style="width:${maitrise}%"></i></div><b>${maitrise} %</b></div>
+        </div>
+        <button class="btn primary big-btn" data-test="final">${p.finals?.length ? "🔁 Refaire le test final" : "🏁 Faire le test final"}</button>
+        <p class="hint center">Les mêmes questions qu'au départ, dans un autre ordre : la comparaison est juste.</p>
+        <div id="progress"></div>`
+  }
+  <h3 class="chapitre">Fiches du chapitre</h3>
+  <div class="list">${fiches.map((f) => carteFiche(f)).join("")}</div>`;
+}
+
+let test = null; // { type, questions, i, choisi, score, erreurs, fini }
+async function lancerTest(type) {
+  const m = ui.matiere;
+  const c = ui.chapitre;
+  const p = store.getProgres(m, c);
+  let questions;
+  if (type === "final" && p.depart?.questions?.length) {
+    // Éco-conception : on reprend les questions du départ, sans appel à Claude.
+    questions = melangerQCM(p.depart.questions);
+  } else {
+    const zone = document.getElementById("progress");
+    document.querySelectorAll("[data-test]").forEach((b) => (b.disabled = true));
+    const pr = progressUI(zone, "Claude prépare ton test sur tout le chapitre…");
+    try {
+      questions = await ai.genererQCM(ficheChapitre(m, c), "moyen", 10, [], pr.update);
+    } catch (err) {
+      zone.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      document.querySelectorAll("[data-test]").forEach((b) => (b.disabled = false));
+      return;
+    } finally {
+      pr.stop();
+    }
+  }
+  test = { type, questions, i: 0, choisi: null, score: 0, erreurs: [], fini: false };
+  go({ view: "test" });
+}
+
+function testView() {
+  if (!test) {
+    ui.view = "chapitre";
+    return chapitreView();
+  }
+  const titre = test.type === "depart" ? "🎯 Test de départ" : "🏁 Test final";
+  const head = `<header class="top" style="--c:${couleur(ui.matiere)}"><button class="icon" data-back>←</button><div class="title"><small>${esc(ui.chapitre)}</small>${titre}</div><span></span></header>`;
+  if (test.i >= test.questions.length) {
+    const note = store.sur20(test.score, test.questions.length);
+    const p = store.getProgres(ui.matiere, ui.chapitre);
+    const comparaison =
+      test.type === "final" && p.depart
+        ? `<div class="compare"><span>Avant <b>${noteDe(p.depart)}/20</b></span><span class="aa-fleche">→</span><span>Maintenant <b>${note}/20</b></span></div>`
+        : `<p class="sub">C'est ton point de départ. Révise les fiches et les cartes du chapitre, puis fais le test final !</p>`;
+    return `${head}<div class="card center done">
+      <div class="big-num">${humeur(note)} ${note}/20</div>
+      <p>${test.score} bonne${test.score > 1 ? "s" : ""} réponse${test.score > 1 ? "s" : ""} sur ${test.questions.length}</p>
+      ${comparaison}
+      ${test.erreurs.length ? `<h3>À revoir</h3><ul class="keys">${test.erreurs.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+      <button class="btn primary big-btn" id="test-voir">📈 Voir mes progrès</button>
+    </div>`;
+  }
+  const q = test.questions[test.i];
+  const rep = test.choisi;
+  return `${head}
+  <div class="counter">Question ${test.i + 1} / ${test.questions.length}</div>
+  <div class="card question">${esc(q.question)}</div>
+  <div class="choices">${q.choix
+    .map((ch, i) => {
+      let cls = "";
+      if (rep !== null) cls = i === q.bonne_reponse ? "good" : i === rep ? "bad" : "dim";
+      return `<button class="choice ${cls}" data-tchoix="${i}" ${rep !== null ? "disabled" : ""}><b>${"ABCD"[i]}</b>${esc(ch)}</button>`;
+    })
+    .join("")}</div>
+  ${
+    rep !== null
+      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? "✅ Bravo !" : "❌ Raté."} ${esc(q.explication)}</div>
+         <button class="btn primary big-btn" id="test-next">${test.i + 1 < test.questions.length ? "Question suivante →" : "Voir ma note"}</button>`
+      : ""
+  }`;
+}
+afterRender.test = () => {
+  if (!test) return;
+  const $ = (id) => document.getElementById(id);
+  document.querySelectorAll("[data-tchoix]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const q = test.questions[test.i];
+        test.choisi = +b.dataset.tchoix;
+        if (test.choisi === q.bonne_reponse) test.score++;
+        else test.erreurs.push(`${q.question} → ${q.choix[q.bonne_reponse]}`);
+        render();
+      })
+  );
+  if ($("test-next"))
+    $("test-next").onclick = () => {
+      test.i++;
+      test.choisi = null;
+      if (test.i >= test.questions.length && !test.fini) {
+        test.fini = true;
+        const p = store.getProgres(ui.matiere, ui.chapitre);
+        const resultat = { date: Date.now(), score: test.score, total: test.questions.length };
+        if (test.type === "depart") p.depart = { ...resultat, questions: test.questions };
+        else p.finals = [...(p.finals || []), resultat];
+        store.saveProgres(ui.matiere, ui.chapitre, p);
+        store.enregistrerActivite("qcm");
+      }
+      render();
+      window.scrollTo(0, 0);
+    };
+  if ($("test-voir"))
+    $("test-voir").onclick = () => {
+      test = null;
+      go({ view: "chapitre" });
+    };
+};
+
 // ---------- Clics globaux ----------
 app.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage]");
+  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage],[data-ajout-matiere],[data-retirer],[data-chapitre],[data-test]");
   if (!t) return;
   // D'où vient-on ? (pour que « ← » ramène à la matière ou à l'accueil)
   const origine = ui.view === "matiere" ? "matiere" : "home";
@@ -947,6 +1306,10 @@ app.addEventListener("click", (e) => {
     go({ view: "fiche", ficheId: t.dataset.open, tab: "resume", retour: origine });
   } else if (t.dataset.tab) go({ tab: t.dataset.tab });
   else if (t.dataset.matiere) go({ view: "matiere", matiere: t.dataset.matiere });
+  else if (t.dataset.ajoutMatiere !== undefined) ouvrirAjoutMatiere();
+  else if (t.dataset.retirer) demanderRetrait(t.dataset.retirer);
+  else if (t.dataset.chapitre) go({ view: "chapitre", chapitre: t.dataset.chapitre, matiere: t.dataset.m || ui.matiere });
+  else if (t.dataset.test) lancerTest(t.dataset.test);
   else if (t.dataset.scan !== undefined) {
     scanMatiere = t.dataset.scan;
     go({ view: "scan", retour: origine });

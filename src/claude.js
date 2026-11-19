@@ -2,7 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
-import { NOMS_MATIERES } from "./matieres.js";
+import { nomsPourClaude } from "./matieres.js";
 
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 (le plus intelligent, recommandé)" },
@@ -137,9 +137,10 @@ const REGLES_FLASHCARDS = `Règles pour chaque flashcard :
 - Le verso répond exactement à la question, en 1 ou 2 phrases.
 - Varie les types : définition, date, acteur, cause, conséquence, exemple, formule, application.`;
 
-const ANALYSE_SCHEMA = obj({
+// Construit à chaque scan : la liste des matières de l'élève peut changer.
+const analyseSchema = () => obj({
   titre: str("Titre court du cours"),
-  matiere: { type: "string", enum: NOMS_MATIERES, description: "Matière scolaire" },
+  matiere: { type: "string", enum: nomsPourClaude(), description: "Matière scolaire (Autre si aucune ne convient)" },
   chapitre: str("Chapitre ou grand thème du programme, court (ex : « La Révolution française », « Théorème de Pythagore »)"),
   transcription: str("Texte fidèle et complet des pages, remis en ordre, en Markdown sobre"),
   resume: str("Fiche de révision synthétique en Markdown (pas une copie de la transcription)"),
@@ -196,7 +197,7 @@ async function analyserCoursClaude(pages, note, matiere, onProgress) {
   // Lecture de l'écriture manuscrite : on garde un effort moyen pour la fiabilité.
   return runJSON(
     { ...baseParams({ effort: "medium", maxTokens: 32000 }), messages: [{ role: "user", content }] },
-    ANALYSE_SCHEMA,
+    analyseSchema(),
     onProgress
   );
 }
