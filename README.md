@@ -25,11 +25,11 @@ Au premier lancement, « Essayer la démo, sans clé » charge une fiche d'histo
 
 ## Installer l'APK sur le téléphone
 
-1. Ouvrir l'onglet **Releases** du dépôt GitHub (ou **Actions** → dernière exécution « Révizz » → *Revizz-apk*).
+1. Ouvrir l'onglet **Releases** du dépôt [AventumGroupe/revizz](https://github.com/AventumGroupe/revizz/releases) (ou **Actions** → dernière exécution → *Revizz-apk*).
 2. Télécharger `Revizz.apk` depuis le téléphone, puis l'ouvrir.
 3. Si Android le demande, autoriser « Installer des applis inconnues » pour le navigateur.
 
-Chaque modification poussée dans `revizz/` recompile l'APK automatiquement. La clé de signature est toujours la même : la nouvelle version s'installe par-dessus l'ancienne et garde les fiches.
+Chaque modification poussée sur la branche `main` recompile l'APK automatiquement (versions 1.1.x ; les 1.0.x venaient de l'ancien dépôt). La clé de signature est toujours la même : la nouvelle version s'installe par-dessus l'ancienne et garde les fiches.
 
 ## Mettre en ligne le site web et le serveur (parent, une fois)
 
@@ -85,7 +85,7 @@ Le modèle se change dans les Réglages.
 ## Développement
 
 ```bash
-cd revizz
+git clone https://github.com/AventumGroupe/revizz && cd revizz
 npm install
 npm run dev            # version web sur http://localhost:5173
 npm run android:apk    # compile l'APK (Android SDK requis), sortie : android/app/build/outputs/apk/debug/
@@ -93,14 +93,14 @@ npm run android:apk    # compile l'APK (Android SDK requis), sortie : android/ap
 
 Structure :
 
+- `.github/workflows/apk.yml` : compilation et publication de l'APK.
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
 - `src/matieres.js` : catalogue des matières, « Mes matières » de l'élève, rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
 - `src/scanner.js` : scanner plein écran en rafale (caméra en direct).
 - `src/sauvegarde.js` : fichier de sauvegarde, reprise par fusion ou remplacement.
 - `src/controles.js` : mode « J'ai un contrôle » (planning et rappels).
-- `netlify/edge-functions/claude.js` et `../netlify.toml` : site web et relais vers Claude (clé côté serveur, code famille).
+- `netlify/edge-functions/claude.js` et `netlify.toml` : site web et relais vers Claude (clé côté serveur, code famille).
 - `src/store.js` : stockage local, répétition espacée (boîtes de Leitner), série de jours.
 - `src/main.js` : les écrans.
 - `android/` : projet Android natif (Capacitor).
-- `.github/workflows/revizz-apk.yml` : compilation de l'APK et publication.

@@ -1,0 +1,11 @@
+# Site web de Révizz (même code que l'APK) + relais vers l'API Claude.
+[build]
+  command = "npm run build"
+  publish = "dist"
+  edge_functions = "netlify/edge-functions"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
