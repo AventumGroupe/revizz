@@ -1,6 +1,6 @@
 # Révizz 📚
 
-Application Android de révision : on prend en photo une fiche ou un cahier, et Claude prépare :
+Application de révision, sur Android (APK) et en version web : on prend en photo une fiche ou un cahier, et Claude prépare :
 
 - **📸 Scanner** : au départ, on choisit « Une page » ou « Plusieurs pages ». Le scanner intégré garde la caméra ouverte : chaque appui sur le déclencheur ajoute une page (flash, vibration, compteur), sans rien valider. Le bouton ↩︎ retire la dernière page, « Terminé » revient à la liste. L'ordre se corrige avec les flèches. Import depuis la galerie ou un PDF toujours possible.
 - **📝 Résumé** : une fiche de révision structurée, les points clés, le vocabulaire et une astuce mémo. Le texte scanné reste consultable.
@@ -10,13 +10,16 @@ Application Android de révision : on prend en photo une fiche ou un cahier, et 
 - **💬 Prof** : un professeur particulier qui répond aux questions sur le cours.
 
 - **🗂️ Mes matières** : l'appli démarre avec les matières de Seconde (Français, Mathématiques, Histoire-Géographie, EMC, SES, SVT, Physique-Chimie, SNT, Anglais, Espagnol, Italien). On en ajoute au fur et à mesure depuis un catalogue (Enseignement scientifique, Philosophie, HGGSP, NSI, HLP, LLCER…) ou en créant la sienne (nom, icône, couleur). Dans une matière, les fiches sont rangées par chapitre. Toucher le titre d'une fiche permet de changer sa matière, son chapitre ou son titre.
+- **🔗 Sujets connexes** : sur chaque fiche, « Pour aller plus loin » propose une notion à revoir avant, des notions pour approfondir et des liens avec d'autres matières. Ils sont produits dans la même demande que le scan (aucun appel en plus). Toucher un sujet ouvre son explication et, si besoin, une mini-fiche (un petit appel, gardé ensuite). L'appli signale aussi les fiches de l'élève qui traitent de la même chose.
+- **📅 J'ai un contrôle** : on indique la matière, la date et les chapitres. L'appli calcule un planning jour par jour (relire chaque fiche, puis un QCM par fiche, les cartes tous les jours, un sujet type contrôle la veille), avec un rappel chaque jour à 18 h sur le téléphone. Les tâches se cochent en les faisant ; après le contrôle, on note sa note. Aucun appel à Claude.
+- **💾 Sauvegarde et synchronisation** : un fichier de sauvegarde (sans la clé ni le code famille) à envoyer sur Drive depuis le menu de partage, et à reprendre sur un autre appareil ou sur le site web, en fusionnant (la version la plus récente de chaque fiche est gardée) ou en remplaçant tout.
 - **📈 Progrès par chapitre** : au début d'un chapitre, un test de départ de 10 questions sur tout le chapitre mesure d'où l'on part. À la fin, le test final reprend les mêmes questions dans un autre ordre, sans nouvel appel à Claude. Deux grandes barres « Avant / Après » et une courbe (départ, QCM d'entraînement, test final, ligne de la moyenne) montrent les progrès.
 
-Les fiches restent sur le téléphone. Les photos ne sont pas conservées : seul le texte est gardé.
+Les fiches restent sur l'appareil (et dans les sauvegardes). Les photos ne sont pas conservées : seul le texte est gardé.
 
 ## Essayer sans clé : le mode démo
 
-Au premier lancement, « Essayer la démo, sans clé » charge une fiche d'histoire d'exemple avec des réponses préparées à l'avance. Toutes les fonctions marchent, sans appel à Claude. En démo, scanner n'importe quelle photo donne une fiche de maths d'exemple. Saisir une clé dans les Réglages quitte la démo et retire les fiches d'exemple.
+Au premier lancement, « Essayer la démo, sans clé » charge une fiche d'histoire d'exemple avec des réponses préparées à l'avance. Toutes les fonctions marchent, sans appel à Claude. En démo, scanner n'importe quelle photo donne une fiche de maths d'exemple. Se connecter dans les Réglages (code famille ou clé) quitte la démo et retire les exemples.
 
 `npm run maquette` produit la même démo en une seule page web : `dist-maquette/revizz-maquette.html`.
 
@@ -28,13 +31,32 @@ Au premier lancement, « Essayer la démo, sans clé » charge une fiche d'histo
 
 Chaque modification poussée dans `revizz/` recompile l'APK automatiquement. La clé de signature est toujours la même : la nouvelle version s'installe par-dessus l'ancienne et garde les fiches.
 
-## Configurer la clé API Claude (parent)
+## Mettre en ligne le site web et le serveur (parent, une fois)
 
-1. Créer un compte sur **platform.claude.com**, ajouter du crédit, puis créer une clé dans *API Keys*.
-2. **Fixer une limite de dépense mensuelle** dans la console (*Limits*), par exemple 10 €.
-3. Dans l'appli : ⚙️ Réglages → Espace parent → coller la clé → « Tester la clé ».
+Le site web et l'APK utilisent le même code. Netlify héberge le site **et** garde la clé Claude côté serveur : elle n'est plus sur le téléphone ni dans le navigateur. Chaque appareil se connecte avec un **code famille**.
 
-La clé est enregistrée seulement sur le téléphone et envoyée directement à l'API d'Anthropic. Toute personne qui a le téléphone en main peut la lire. C'est pour cela que la limite de dépense est importante.
+1. **Clé Claude** : sur **platform.claude.com**, ajouter du crédit, créer une clé (*API Keys*) et **fixer une limite de dépense mensuelle** (*Limits*), par exemple 10 €.
+2. **Netlify** : créer un compte gratuit sur **netlify.com** (« Sign up with GitHub »).
+3. *Add new site* → *Import an existing project* → **GitHub** → autoriser l'accès au dépôt, puis le choisir. Branche : celle de Révizz. Les réglages de compilation sont lus dans `netlify.toml` : ne rien changer.
+4. Avant de lancer, ou ensuite dans *Site configuration → Environment variables*, ajouter :
+   - `ANTHROPIC_API_KEY` : la clé Claude (cocher « secret ») ;
+   - `REVIZZ_CODE` : le code famille, au moins 12 caractères (ex. `fusee-bleue-cerisier-42`).
+5. *Deploy*. Noter l'adresse du site (ex. `https://revizz-famille.netlify.app`, modifiable dans *Site configuration → Change site name*). Après un changement de variable, relancer un déploiement (*Deploys → Trigger deploy*).
+6. **Dans l'appli** (APK et site) : ⚙️ Réglages → Espace parent → **Code famille** → adresse du site (préremplie sur le site web) + code → *Enregistrer* → *Tester la connexion*.
+7. Facultatif : dans GitHub, *Settings → Secrets and variables → Actions → Variables*, créer `REVIZZ_SERVEUR` avec l'adresse du site : les prochains APK l'auront déjà remplie.
+
+Le serveur (`netlify/edge-functions/claude.js`) refuse les appels sans le bon code famille, n'accepte que les modèles de l'appli et ne relaie que la création de messages. Pour changer le code, modifier `REVIZZ_CODE` dans Netlify, relancer un déploiement, puis le ressaisir sur chaque appareil.
+
+**Option sans serveur** : Réglages → Espace parent → *Clé API personnelle*. La clé est alors enregistrée sur l'appareil, et toute personne qui l'a en main peut la lire. Les versions précédentes de l'APK, qui utilisaient une clé, gardent ce mode après la mise à jour.
+
+## Passer du téléphone au site web
+
+Les fiches sont enregistrées sur chaque appareil. Pour retrouver sur le site les fiches du téléphone (ou l'inverse) :
+
+1. Sur l'appareil qui a les fiches : Réglages → **Sauvegarder vers Drive** (sur le téléphone, choisir « Drive » dans le menu de partage ; sur le site, le fichier est téléchargé).
+2. Sur l'autre appareil : Réglages → **Reprendre une sauvegarde** → choisir le fichier `revizz-sauvegarde-…json` → **Fusionner**.
+
+L'accueil rappelle de sauvegarder quand la dernière sauvegarde a plus d'une semaine.
 
 ### Coût indicatif
 
@@ -75,6 +97,9 @@ Structure :
 - `src/matieres.js` : catalogue des matières, « Mes matières » de l'élève, rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
 - `src/scanner.js` : scanner plein écran en rafale (caméra en direct).
+- `src/sauvegarde.js` : fichier de sauvegarde, reprise par fusion ou remplacement.
+- `src/controles.js` : mode « J'ai un contrôle » (planning et rappels).
+- `netlify/edge-functions/claude.js` et `../netlify.toml` : site web et relais vers Claude (clé côté serveur, code famille).
 - `src/store.js` : stockage local, répétition espacée (boîtes de Leitner), série de jours.
 - `src/main.js` : les écrans.
 - `android/` : projet Android natif (Capacitor).

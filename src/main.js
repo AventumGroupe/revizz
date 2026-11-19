@@ -5,6 +5,8 @@ import * as store from "./store.js";
 import * as ai from "./claude.js";
 import { ficheDeDepart, questionsDepartDemo } from "./demo.js";
 import { ouvrirScanner } from "./scanner.js";
+import * as sauvegarde from "./sauvegarde.js";
+import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, emoji } from "./matieres.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
@@ -72,6 +74,7 @@ function back() {
   if (scanner) return scanner.click();
   if (ui.view === "fiche" || ui.view === "scan" || ui.view === "revision") go({ view: ui.retour });
   else if (ui.view === "chapitre") go({ view: "matiere" });
+  else if (ui.view === "controle") go({ view: ui.retourControle || "home" });
   else if (ui.view === "test") go({ view: "chapitre" });
   else if (ui.view === "settings" || ui.view === "matiere") go({ view: "home", matiere: null });
 }
@@ -109,13 +112,14 @@ function quitterDemo() {
   store.saveSettings({ demo: false });
   store.getFiches().filter((f) => f.demoKey).forEach((f) => store.deleteFiche(f.id));
   store.supprimerProgresDemo();
+  ctrl.supprimerControlesDemo();
 }
 
 function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
-  if (!s.apiKey && !s.demo && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, matiere: matiereView, chapitre: chapitreView, test: testView, scan, fiche: ficheView, settings, revision };
+  if (!ai.estConfigure(s) && ui.view !== "settings") ui.view = "welcome";
+  const views = { welcome, home, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
   app.innerHTML = views[ui.view]();
   afterRender[ui.view]?.();
 }
@@ -134,7 +138,7 @@ function welcome() {
       <li>🎯 Entraîne-toi jusqu'à tout savoir</li>
     </ol>
     <div class="welcome-actions">
-      <button class="btn primary big-btn" data-go="settings">Commencer avec ma clé Claude</button>
+      <button class="btn primary big-btn" data-go="settings">Me connecter avec le code famille</button>
       <button class="btn secondary big-btn" id="btn-demo">👀 Essayer la démo, sans clé</button>
     </div>
   </div>`;
@@ -156,7 +160,7 @@ function home() {
     <button class="icon" data-go="settings" aria-label="Réglages">⚙️</button>
   </header>
 
-  ${s.demo ? `<div class="demo-banner"><span><b>Mode démo</b> · réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " En démo, n'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="btn secondary" data-go="settings">Utiliser ma clé</button>`}</div>` : ""}
+  ${s.demo ? `<div class="demo-banner"><span><b>Mode démo</b> · réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " En démo, n'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="btn secondary" data-go="settings">Me connecter</button>`}</div>` : ""}
   <section class="stats">
     <div class="stat"><b>🔥 ${stats.serie}</b><span>jour${stats.serie > 1 ? "s" : ""} de suite</span></div>
     <div class="stat"><b>📚 ${fiches.length}</b><span>fiche${fiches.length > 1 ? "s" : ""}</span></div>
@@ -166,6 +170,8 @@ function home() {
   <button class="btn primary big-btn" data-scan="">📸 Scanner une fiche</button>
   ${dues ? `<button class="btn secondary big-btn" data-revision="">🃏 Révision du jour (${dues} cartes)</button>` : ""}
 
+  ${controlesAccueil()}
+  ${rappelSauvegarde(fiches)}
   <h3>Mes matières</h3>
   <div class="matieres">${grilleMatieres(fiches)}</div>
   ${
@@ -174,6 +180,12 @@ function home() {
          <div class="list">${recentes.map((f) => carteFiche(f, true)).join("")}</div>`
       : `<div class="empty">Aucune fiche pour l'instant.<br>Touche une matière ou scanne ton premier cours !</div>`
   }`;
+}
+function rappelSauvegarde(fiches) {
+  if (DEMO_ONLY || store.getSettings().demo || fiches.length < 2) return "";
+  const der = sauvegarde.derniereSauvegarde();
+  if (der && Date.now() - der < 7 * 864e5) return "";
+  return `<div class="depart-banner"><span>💾 <b>${der ? `Dernière sauvegarde ${ilYa(der)}` : "Aucune sauvegarde"}</b> : mets tes fiches à l'abri sur Drive.</span><button class="btn secondary" data-go="settings">Sauvegarder</button></div>`;
 }
 // Une tuile par matière de « Mes matières » (« Autre » seulement si elle a des fiches), puis « Ajouter ».
 function grilleMatieres(fiches) {
@@ -287,6 +299,7 @@ function matiereView() {
   </header>
   ${dues ? `<button class="btn primary big-btn" data-revision="${esc(nom)}">🃏 Réviser les cartes de ${esc(nom)} (${dues})</button>` : `<div class="card center">✅ Toutes les cartes de ${esc(nom)} sont à jour.</div>`}
   <button class="btn secondary big-btn" data-scan="${esc(nom)}">📸 Ajouter une fiche de ${esc(nom)}</button>
+  <button class="btn ghost big-btn" data-nouveau-controle="${esc(nom)}">📅 J'ai un contrôle de ${esc(nom)}</button>
   ${groupes
     .map(
       ([chap, liste]) => `<div class="chap-head"><h3 class="chapitre">${esc(chap)}</h3>
@@ -463,6 +476,7 @@ function nouvelleFiche(r) {
     points_cles: r.points_cles,
     vocabulaire: r.vocabulaire,
     astuce: r.astuce_memo,
+    connexes: r.connexes || [],
     flashcards: r.flashcards.map(store.nouvelleCarte),
     questionsVues: [],
     qcm: [],
@@ -599,13 +613,126 @@ function tabResume(f) {
       : ""
   }
   ${f.astuce ? `<div class="astuce">💡 <b>Astuce mémo :</b> ${esc(f.astuce)}</div>` : ""}
+  ${connexesHTML(f)}
   <details class="card"><summary>Voir le texte du cours scanné</summary><div class="md">${md(f.transcription)}</div></details>
   <div class="row">
     <button class="btn secondary" data-tab="cartes">🃏 Réviser les cartes</button>
     <button class="btn secondary" data-tab="qcm">✅ Faire un QCM</button>
   </div>`;
 }
-function bindResume() {}
+function bindResume(f) {
+  document.querySelectorAll("[data-connexe]").forEach((b) => (b.onclick = () => ouvrirConnexe(f, +b.dataset.connexe)));
+  const btn = document.getElementById("btn-connexes");
+  if (btn)
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const zone = document.getElementById("progress-connexes");
+      const p = progressUI(zone, "Claude cherche les sujets connexes…");
+      try {
+        const fiche = store.getFiche(f.id);
+        fiche.connexes = await ai.trouverConnexes(fiche, p.update);
+        store.saveFiche(fiche);
+        render();
+      } catch (err) {
+        zone.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+        btn.disabled = false;
+      } finally {
+        p.stop();
+      }
+    };
+}
+
+// ---------- Sujets connexes et liens entre fiches (calculés sur l'appareil, sans appel) ----------
+const MOTS_VIDES = new Set(["entre", "aussi", "comme", "leurs", "cette", "ainsi", "alors", "selon", "notion", "notions", "cours", "chapitre", "fiche", "question", "exemple", "toujours", "permet", "qu'il", "c'est"]);
+function motsCles(texte = "") {
+  return new Set(
+    texte.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length > 4 && !MOTS_VIDES.has(w))
+  );
+}
+const signature = (f) => motsCles([f.titre, f.chapitre, ...(f.vocabulaire || []).map((v) => v.terme), ...(f.points_cles || [])].join(" "));
+const communs = (a, b) => [...a].filter((w) => b.has(w)).length;
+// Fiches de l'élève qui parlent de la même chose (mots clés en commun).
+function fichesLiees(f) {
+  const sf = signature(f);
+  return store
+    .getFiches()
+    .filter((x) => x.id !== f.id)
+    .map((x) => ({ x, n: communs(sf, signature(x)) }))
+    .filter((o) => o.n >= 2)
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 3)
+    .map((o) => o.x);
+}
+// Une fiche de l'élève qui traite déjà ce sujet connexe ?
+function ficheDuConnexe(c, f) {
+  const mc = motsCles(c.titre);
+  if (!mc.size) return null;
+  return store.getFiches().find((x) => x.id !== f.id && communs(mc, motsCles([x.titre, x.chapitre, ...(x.vocabulaire || []).map((v) => v.terme)].join(" "))) >= Math.min(2, mc.size));
+}
+const GROUPES_CONNEXES = [
+  ["prerequis", "⬅️ À revoir avant"],
+  ["approfondissement", "➕ Pour aller plus loin"],
+  ["autre_matiere", "🔀 Dans une autre matière"],
+];
+function connexesHTML(f) {
+  const liees = fichesLiees(f);
+  const liens = liees.length
+    ? `<div class="liees"><b>📚 Ça rejoint tes fiches :</b>${liees.map((x) => `<button class="lien-fiche" data-open="${x.id}">${emoji(x.matiere)} ${esc(x.titre)}</button>`).join("")}</div>`
+    : "";
+  if (!f.connexes?.length)
+    return `<div class="card connexes"><h3>🔗 Pour aller plus loin</h3>
+      <p class="hint">Découvre ce qu'il faut revoir avant ce cours, ce qui le prolonge et ses liens avec tes autres matières.</p>
+      <button class="btn secondary big-btn" id="btn-connexes">🔗 Trouver les sujets connexes</button><div id="progress-connexes"></div>${liens}</div>`;
+  return `<div class="card connexes"><h3>🔗 Pour aller plus loin</h3>
+    ${GROUPES_CONNEXES.map(([type, titre]) => {
+      const items = f.connexes.map((c, i) => ({ c, i })).filter(({ c }) => c.type === type);
+      if (!items.length) return "";
+      return `<div class="cx-groupe"><small>${titre}</small><div class="cx-chips">${items
+        .map(({ c, i }) => `<button class="cx-chip" data-connexe="${i}" style="--c:${couleur(c.matiere)}">${type === "autre_matiere" ? emoji(c.matiere) + " " : ""}${esc(c.titre)}${c.mini ? " ✓" : ""}</button>`)
+        .join("")}</div></div>`;
+    }).join("")}
+    ${liens}</div>`;
+}
+function ouvrirConnexe(f, i) {
+  const c = f.connexes[i];
+  const liee = ficheDuConnexe(c, f);
+  const libelle = Object.fromEntries(GROUPES_CONNEXES)[c.type] || "Sujet connexe";
+  modale(
+    `<small class="cx-type">${libelle} · ${emoji(c.matiere)} ${esc(c.matiere)}</small>
+    <h3>${esc(c.titre)}</h3>
+    <p>${esc(c.pourquoi)}</p>
+    ${liee ? `<button class="btn secondary big-btn" data-ouvrir="${liee.id}">📚 Ta fiche : ${esc(liee.titre)}</button>` : ""}
+    <div id="cx-mini">${c.mini ? `<div class="md card">${md(c.mini)}</div>` : `<button class="btn primary big-btn" id="cx-gen">✨ Mini-fiche sur ce sujet</button><p class="hint center">Un petit appel à Claude, gardé ensuite sur la fiche.</p>`}</div>
+    <button class="btn ghost" id="cx-fermer">Fermer</button>`,
+    (box, fermer) => {
+      box.querySelector("#cx-fermer").onclick = fermer;
+      box.querySelector("[data-ouvrir]")?.addEventListener("click", (e) => {
+        fermer();
+        go({ view: "fiche", ficheId: e.currentTarget.dataset.ouvrir, tab: "resume" });
+      });
+      const gen = box.querySelector("#cx-gen");
+      if (gen)
+        gen.onclick = async () => {
+          gen.disabled = true;
+          const zone = box.querySelector("#cx-mini");
+          const p = progressUI(zone, "Claude rédige la mini-fiche…");
+          try {
+            const texte = await ai.miniFiche(f, c, p.update);
+            const fiche = store.getFiche(f.id);
+            fiche.connexes[i].mini = texte;
+            store.saveFiche(fiche);
+            f.connexes[i].mini = texte;
+            render(); // la pastille du sujet affiche ✓ sous la fenêtre
+            zone.innerHTML = `<div class="md card">${md(texte)}</div>`;
+          } catch (err) {
+            zone.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+          } finally {
+            p.stop();
+          }
+        };
+    }
+  );
+}
 
 // --- Flashcards
 let session = null; // { ficheId, cartes, i, retourne, sues }
@@ -1011,15 +1138,30 @@ function settings() {
       ? `<div class="card parent"><h3>👨‍👩‍👦 Espace parent</h3><p class="hint">Dans l'appli Android, c'est ici que tu colles la clé API Claude et que tu choisis le modèle. Cette maquette fonctionne uniquement en mode démo.</p></div>`
       : `<div class="card parent">
     <h3>👨‍👩‍👦 Espace parent</h3>
-    <label class="field">Clé API Claude
-      <input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off">
-    </label>
-    <p class="hint">Crée une clé sur <b>platform.claude.com</b> → API Keys. Elle reste uniquement sur ce téléphone. Pense à fixer une limite de dépense mensuelle dans la console.</p>
+    <div class="seg" role="group" aria-label="Connexion à Claude">
+      <button data-cx="serveur" class="${s.connexion !== "cle" ? "on" : ""}">Code famille</button>
+      <button data-cx="cle" class="${s.connexion === "cle" ? "on" : ""}">Clé API personnelle</button>
+    </div>
+    <div id="cx-serveur" ${s.connexion === "cle" ? "hidden" : ""}>
+      <label class="field">Adresse du site Révizz
+        <input id="serveur" type="url" inputmode="url" value="${esc(s.serveur || ai.adresseServeur({ ...s, serveur: "" }))}" placeholder="https://revizz-famille.netlify.app" autocomplete="off">
+      </label>
+      <label class="field">Code famille
+        <input id="code" type="password" value="${esc(s.code)}" placeholder="le code choisi dans Netlify" autocomplete="off">
+      </label>
+      <p class="hint">La clé Claude est gardée sur le serveur Netlify : elle n'est jamais sur cet appareil. Le même code fonctionne sur le téléphone et sur le site web.</p>
+    </div>
+    <div id="cx-cle" ${s.connexion === "cle" ? "" : "hidden"}>
+      <label class="field">Clé API Claude
+        <input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off">
+      </label>
+      <p class="hint">Crée une clé sur <b>platform.claude.com</b> → API Keys. Elle reste sur cet appareil. Pense à fixer une limite de dépense mensuelle dans la console.</p>
+    </div>
     <label class="field">Modèle<select id="model">${ai.MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select></label>
   </div>`
   }
   <button class="btn primary big-btn" id="save">Enregistrer</button>
-  ${DEMO_ONLY ? "" : `<button class="btn ghost big-btn" id="test">Tester la clé</button>`}
+  ${DEMO_ONLY ? "" : `<button class="btn ghost big-btn" id="test">Tester la connexion</button>`}
   ${s.demo && !DEMO_ONLY ? `<button class="btn ghost big-btn" id="quit-demo">Quitter la démo</button>` : ""}
   <div id="progress"></div>
   <div class="card">
@@ -1030,10 +1172,79 @@ function settings() {
       .join("")}</div>
     <button class="btn secondary big-btn" data-ajout-matiere>➕ Ajouter une matière</button>
   </div>
+  ${DEMO_ONLY ? "" : sauvegardeHTML()}
   ${consoHTML()}
-  <p class="hint center">Révizz · tes fiches restent sur ce téléphone.</p>`;
+  <p class="hint center">Révizz · tes fiches restent sur cet appareil, et dans tes sauvegardes.</p>`;
 }
 const nf = (n) => n.toLocaleString("fr-FR");
+const ilYa = (t) => {
+  const j = Math.floor((Date.now() - t) / 864e5);
+  return j <= 0 ? "aujourd'hui" : j === 1 ? "hier" : `il y a ${j} jours`;
+};
+function sauvegardeHTML() {
+  const der = sauvegarde.derniereSauvegarde();
+  const natif = Capacitor.isNativePlatform();
+  return `<div class="card" id="carte-sauvegarde">
+    <h3>💾 Sauvegarde et synchronisation</h3>
+    <p class="${der && Date.now() - der < 7 * 864e5 ? "hint" : "alerte"}">Dernière sauvegarde : <b>${der ? ilYa(der) : "jamais"}</b></p>
+    <button class="btn primary big-btn" id="btn-sauver">${natif ? "📤 Sauvegarder vers Drive" : "📤 Télécharger une sauvegarde"}</button>
+    <button class="btn secondary big-btn" id="btn-reprendre">📥 Reprendre une sauvegarde</button>
+    <input type="file" id="file-sauvegarde" accept="application/json,.json" hidden>
+    <details class="aide"><summary>Passer du téléphone au site web (et inversement)</summary>
+      <ol>
+        <li>Sur l'appareil où sont les fiches : <b>Sauvegarder vers Drive</b> (sur le téléphone, choisis « Drive » dans le menu de partage).</li>
+        <li>Sur l'autre appareil : <b>Reprendre une sauvegarde</b> et choisis le fichier <i>revizz-sauvegarde-…</i> (sur ordinateur, télécharge-le d'abord depuis Drive).</li>
+        <li>Choisis <b>Fusionner</b> : rien n'est perdu, et pour une même fiche c'est la version la plus récente qui est gardée.</li>
+      </ol>
+    </details>
+  </div>`;
+}
+function bindSauvegarde() {
+  const $ = (id) => document.getElementById(id);
+  if (!$("btn-sauver")) return;
+  $("btn-sauver").onclick = async () => {
+    try {
+      const nom = await sauvegarde.sauvegarder();
+      toast(`Sauvegarde prête : ${nom}`);
+      render();
+    } catch (e) {
+      if (!/cancel|annul/i.test(e?.message || "")) toast("Sauvegarde impossible : " + (e?.message || e));
+    }
+  };
+  $("btn-reprendre").onclick = () => $("file-sauvegarde").click();
+  $("file-sauvegarde").onchange = async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    let s;
+    try {
+      s = sauvegarde.lireSauvegarde(await f.text());
+    } catch (err) {
+      return toast(err.message);
+    }
+    const nb = (s.donnees["revizz.fiches"] || []).length;
+    modale(
+      `<h3>Reprendre la sauvegarde</h3>
+      <p>Sauvegarde du <b>${new Date(s.date).toLocaleDateString("fr-FR")}</b> : ${nb} fiche${nb > 1 ? "s" : ""}.</p>
+      <button class="btn primary big-btn" data-mode="fusionner">🔀 Fusionner (recommandé)</button>
+      <p class="hint">Garde les fiches de cet appareil et ajoute celles de la sauvegarde.</p>
+      <button class="btn secondary big-btn" data-mode="remplacer">♻️ Tout remplacer</button>
+      <p class="hint">Cet appareil devient une copie exacte de la sauvegarde.</p>
+      <button class="btn ghost" data-mode="">Annuler</button>`,
+      (box, fermer) =>
+        box.querySelectorAll("[data-mode]").forEach(
+          (b) =>
+            (b.onclick = () => {
+              fermer();
+              if (!b.dataset.mode) return;
+              const bilan = sauvegarde.reprendre(s, b.dataset.mode);
+              toast(b.dataset.mode === "remplacer" ? `Sauvegarde reprise : ${bilan.ajoutees} fiches` : `${bilan.ajoutees} fiche(s) ajoutée(s), ${bilan.majs} mise(s) à jour`);
+              render();
+            })
+        )
+    );
+    e.target.value = "";
+  };
+}
 function consoHTML() {
   const c = store.getConso();
   if (!c.appels) return "";
@@ -1053,21 +1264,42 @@ function consoHTML() {
 }
 afterRender.settings = () => {
   const $ = (id) => document.getElementById(id);
+  bindSauvegarde();
   if ($("reset-conso"))
     $("reset-conso").onclick = () => {
       store.resetConso();
       render();
     };
+  document.querySelectorAll("[data-cx]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        document.querySelectorAll("[data-cx]").forEach((x) => x.classList.toggle("on", x === b));
+        $("cx-serveur").hidden = b.dataset.cx !== "serveur";
+        $("cx-cle").hidden = b.dataset.cx !== "cle";
+      })
+  );
   const save = () => {
     const reglages = { prenom: $("prenom").value.trim(), classe: $("classe").value };
-    if (!DEMO_ONLY) Object.assign(reglages, { apiKey: $("apikey").value.trim(), model: $("model").value });
+    if (!DEMO_ONLY) {
+      const connexion = document.querySelector("[data-cx].on")?.dataset.cx || "serveur";
+      const serveur = $("serveur").value.trim();
+      Object.assign(reglages, {
+        connexion,
+        apiKey: $("apikey").value.trim(),
+        code: $("code").value.trim(),
+        // On ne mémorise l'adresse que si elle diffère de celle trouvée automatiquement.
+        serveur: serveur && serveur !== ai.adresseServeur({ serveur: "" }) ? serveur : "",
+        model: $("model").value,
+      });
+    }
     store.saveSettings(reglages);
   };
   $("save").onclick = () => {
     save();
     const s = store.getSettings();
-    if (!s.apiKey && !s.demo) return toast("Il faut une clé API pour utiliser Révizz.");
-    if (s.apiKey && s.demo && !DEMO_ONLY) quitterDemo();
+    const pret = ai.estConfigure({ ...s, demo: false });
+    if (!pret && !s.demo) return toast(s.connexion === "cle" ? "Il faut une clé API pour utiliser Révizz." : "Il faut l'adresse du site et le code famille.");
+    if (pret && s.demo && !DEMO_ONLY) quitterDemo();
     toast("Enregistré ✅");
     go({ view: "home" });
   };
@@ -1075,7 +1307,7 @@ afterRender.settings = () => {
     $("quit-demo").onclick = async () => {
       if (!(await confirmer("Quitter la démo ? Les fiches d'exemple seront supprimées.", "Quitter"))) return;
       quitterDemo();
-      go({ view: store.getSettings().apiKey ? "home" : "welcome" });
+      go({ view: ai.estConfigure() ? "home" : "welcome" });
     };
   if ($("test")) $("test").onclick = async (e) => {
     save();
@@ -1083,7 +1315,7 @@ afterRender.settings = () => {
     const p = progressUI($("progress"), "Je contacte Claude…");
     try {
       await ai.testerCle();
-      $("progress").innerHTML = `<div class="success">La clé fonctionne ✅</div>`;
+      $("progress").innerHTML = `<div class="success">Connexion à Claude réussie ✅</div>`;
     } catch (err) {
       $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
     } finally {
@@ -1333,9 +1565,171 @@ afterRender.test = () => {
     };
 };
 
+// ---------- Mode « J'ai un contrôle » ----------
+const dateLisible = (isoDate) => new Date(isoDate + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+const libelleJour = (isoDate) => {
+  const r = Math.round((new Date(isoDate + "T12:00") - new Date(ctrl.aujourdhui() + "T12:00")) / 864e5);
+  return r === 0 ? "Aujourd'hui" : r === 1 ? "Demain" : dateLisible(isoDate);
+};
+const compteARebours = (c) => {
+  const r = ctrl.joursRestants(c);
+  return r === 0 ? "C'est aujourd'hui !" : r === 1 ? "Demain" : `Dans ${r} jours`;
+};
+
+function controlesAccueil() {
+  if (DEMO_ONLY && !store.getFiches().length) return "";
+  const prochains = ctrl.aVenir();
+  const aNoter = ctrl.passes().filter((c) => c.note === null && ctrl.joursRestants(c) >= -7);
+  const cartes = prochains
+    .map((c) => {
+      const { taches, faites } = ctrl.duJour(c);
+      return `<button class="ctrl-card" data-controle="${c.id}" style="--c:${couleur(c.matiere)}">
+        <span class="em">${emoji(c.matiere)}</span>
+        <span class="ctrl-txt"><b>Contrôle de ${esc(c.matiere)}${c.titre ? ` · ${esc(c.titre)}` : ""}</b>
+        <small>${compteARebours(c)} · ${dateLisible(c.date)}</small>
+        ${taches.length ? `<span class="bar"><i style="width:${Math.round((faites / taches.length) * 100)}%"></i></span><small>Aujourd'hui : ${faites}/${taches.length} tâche${taches.length > 1 ? "s" : ""}</small>` : ""}</span>
+      </button>`;
+    })
+    .join("");
+  const notes = aNoter
+    .map((c) => `<button class="ctrl-card passe" data-controle="${c.id}" style="--c:${couleur(c.matiere)}"><span class="em">📝</span><span class="ctrl-txt"><b>Ton contrôle de ${esc(c.matiere)} : quelle note ?</b><small>Note-la pour suivre tes progrès</small></span></button>`)
+    .join("");
+  return `${cartes || notes ? `<h3>📅 Mes contrôles</h3><div class="list">${cartes}${notes}</div>` : ""}
+    <button class="btn ghost big-btn" data-nouveau-controle="">📅 J'ai un contrôle</button>`;
+}
+
+function ouvrirNouveauControle(matiere) {
+  const fichesDe = (m) => store.getFiches().filter((f) => f.matiere === m);
+  const demain = ctrl.iso(Date.now() + 864e5);
+  const listeChapitres = (m) => {
+    const chaps = [...new Set(fichesDe(m).map((f) => f.chapitre || "Sans chapitre"))];
+    return chaps.length
+      ? chaps.map((c) => `<label class="check"><input type="checkbox" value="${esc(c)}" checked> ${esc(c)}</label>`).join("")
+      : `<p class="hint">Pas encore de fiche dans cette matière : le planning proposera les cartes et un sujet dès que tu auras scanné tes cours.</p>`;
+  };
+  const choisie = matiere || getMatieres().find((m) => fichesDe(m.nom).length)?.nom || getMatieres()[0].nom;
+  modale(
+    `<h3>📅 J'ai un contrôle</h3>
+    <label class="field">Matière<select id="nc-matiere">${getMatieres().map((m) => `<option value="${esc(m.nom)}" ${m.nom === choisie ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("")}</select></label>
+    <label class="field">Date du contrôle<input id="nc-date" type="date" min="${ctrl.aujourdhui()}" value="${ctrl.iso(Date.now() + 4 * 864e5)}"></label>
+    <div class="field">Chapitres au programme<div id="nc-chapitres" class="checks">${listeChapitres(choisie)}</div></div>
+    <label class="field">Précision (facultatif)<input id="nc-titre" placeholder="ex : interro sur la partie 2" maxlength="40"></label>
+    <div class="row"><button class="btn secondary" id="nc-annuler">Annuler</button><button class="btn primary" id="nc-ok">Créer mon planning</button></div>`,
+    (box, fermer) => {
+      const $ = (s) => box.querySelector(s);
+      $("#nc-matiere").onchange = (e) => ($("#nc-chapitres").innerHTML = listeChapitres(e.target.value));
+      $("#nc-annuler").onclick = fermer;
+      $("#nc-ok").onclick = async () => {
+        const date = $("#nc-date").value;
+        if (!date || date < ctrl.aujourdhui()) return toast("Choisis une date à venir 📅");
+        const c = ctrl.nouveauControle({
+          matiere: $("#nc-matiere").value,
+          date,
+          chapitres: [...box.querySelectorAll("#nc-chapitres input:checked")].map((i) => i.value),
+          titre: $("#nc-titre").value.trim(),
+        });
+        fermer();
+        const origine = ui.view === "matiere" ? "matiere" : "home";
+        go({ view: "controle", controleId: c.id, retourControle: origine });
+        const ok = await ctrl.programmerRappels(c, c.matiere);
+        if (Capacitor.isNativePlatform()) toast(ok ? "Rappel chaque jour à 18 h ⏰" : "Rappels refusés : autorise les notifications de Révizz dans les réglages d'Android.");
+      };
+      void demain;
+    }
+  );
+}
+
+function controleView() {
+  const c = ctrl.getControle(ui.controleId);
+  if (!c) {
+    ui.view = "home";
+    return home();
+  }
+  const r = ctrl.joursRestants(c);
+  const head = `<header class="top" style="--c:${couleur(c.matiere)}"><button class="icon" data-back>←</button>
+    <div class="title"><small>${emoji(c.matiere)} ${esc(c.matiere)}${c.titre ? ` · ${esc(c.titre)}` : ""}</small>Contrôle du ${dateLisible(c.date)}</div>
+    <button class="icon" id="ctrl-suppr" aria-label="Supprimer ce contrôle">🗑️</button></header>`;
+  if (r < 0) {
+    return `${head}
+    <div class="card center">
+      <div class="big-num">📝</div>
+      <p>Le contrôle est passé. Quelle note as-tu eue ?</p>
+      <div class="note-row"><input id="ctrl-note" type="number" min="0" max="20" step="0.5" inputmode="decimal" value="${c.note ?? ""}" placeholder="—"><span>/20</span></div>
+      <button class="btn primary big-btn" id="ctrl-note-ok">Enregistrer ma note</button>
+      ${c.note !== null ? `<p class="aa-msg">${humeur(c.note)} ${c.note}/20 enregistré</p>` : ""}
+    </div>`;
+  }
+  const plan = ctrl.planning(c);
+  const total = plan.reduce((n, j) => n + j.taches.length, 0);
+  const faites = plan.reduce((n, j) => n + j.taches.filter((t) => c.faits[t.id]).length, 0);
+  return `${head}
+  <div class="card center rebours">
+    <div class="big-num">${r === 0 ? "Jour J" : `J-${r}`}</div>
+    <p>${compteARebours(c)} · ${faites}/${total} tâche${total > 1 ? "s" : ""} faite${total > 1 ? "s" : ""}</p>
+    <div class="bar wide"><i style="width:${total ? Math.round((faites / total) * 100) : 0}%"></i></div>
+    ${Capacitor.isNativePlatform() ? `<p class="hint">⏰ Rappel chaque jour à 18 h.</p>` : ""}
+  </div>
+  ${plan
+    .map(
+      (j) => `<h3 class="${j.date === ctrl.aujourdhui() ? "jour-actuel" : ""}">${libelleJour(j.date)}</h3>
+      <div class="taches">${j.taches
+        .map(
+          (t) => `<div class="tache ${c.faits[t.id] ? "faite" : ""}">
+            <button class="coche" data-coche="${esc(t.id)}" aria-label="${c.faits[t.id] ? "Marquer à faire" : "Marquer comme faite"}">${c.faits[t.id] ? "✓" : ""}</button>
+            <button class="tache-txt" data-tache="${esc(t.id)}">${esc(t.label)} <span>→</span></button>
+          </div>`
+        )
+        .join("")}</div>`
+    )
+    .join("")}
+  <p class="hint center">Touche une tâche pour la faire : elle est cochée automatiquement.</p>`;
+}
+afterRender.controle = () => {
+  const c = ctrl.getControle(ui.controleId);
+  if (!c) return;
+  const $ = (id) => document.getElementById(id);
+  $("ctrl-suppr").onclick = async () => {
+    if (!(await confirmer("Supprimer ce contrôle et son planning ?"))) return;
+    await ctrl.supprimerControle(c.id);
+    go({ view: ui.retourControle || "home" });
+  };
+  if ($("ctrl-note-ok"))
+    $("ctrl-note-ok").onclick = () => {
+      const v = parseFloat(String($("ctrl-note").value).replace(",", "."));
+      if (isNaN(v) || v < 0 || v > 20) return toast("Une note entre 0 et 20 ✍️");
+      c.note = v;
+      ctrl.saveControle(c);
+      toast("Note enregistrée ✅");
+      render();
+    };
+  const taches = Object.fromEntries(ctrl.planning(c).flatMap((j) => j.taches).map((t) => [t.id, t]));
+  document.querySelectorAll("[data-coche]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        ctrl.cocher(c, b.dataset.coche, !c.faits[b.dataset.coche]);
+        render();
+      })
+  );
+  document.querySelectorAll("[data-tache]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const t = taches[b.dataset.tache];
+        ctrl.cocher(c, t.id, true);
+        const a = t.action;
+        if (a.vue === "fiche") {
+          if (a.tab === "sujet") sujetType = "controle";
+          go({ view: "fiche", ficheId: a.ficheId, tab: a.tab, retour: "controle" });
+        } else if (a.vue === "revision") {
+          sessionJour = null;
+          go({ view: "revision", revMatiere: c.matiere, retour: "controle" });
+        } else go({ view: "matiere", matiere: c.matiere });
+      })
+  );
+};
+
 // ---------- Clics globaux ----------
 app.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage],[data-ajout-matiere],[data-retirer],[data-chapitre],[data-test]");
+  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage],[data-ajout-matiere],[data-retirer],[data-chapitre],[data-test],[data-nouveau-controle],[data-controle]");
   if (!t) return;
   // D'où vient-on ? (pour que « ← » ramène à la matière ou à l'accueil)
   const origine = ui.view === "matiere" ? "matiere" : "home";
@@ -1351,6 +1745,8 @@ app.addEventListener("click", (e) => {
   else if (t.dataset.retirer) demanderRetrait(t.dataset.retirer);
   else if (t.dataset.chapitre) go({ view: "chapitre", chapitre: t.dataset.chapitre, matiere: t.dataset.m || ui.matiere });
   else if (t.dataset.test) lancerTest(t.dataset.test);
+  else if (t.dataset.nouveauControle !== undefined) ouvrirNouveauControle(t.dataset.nouveauControle || ui.matiere || "");
+  else if (t.dataset.controle) go({ view: "controle", controleId: t.dataset.controle, retourControle: origine });
   else if (t.dataset.scan !== undefined) {
     scanMatiere = t.dataset.scan;
     go({ view: "scan", retour: origine });

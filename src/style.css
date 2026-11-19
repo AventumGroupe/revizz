@@ -246,3 +246,39 @@ h3.chapitre { color: var(--muted); font-size: .85rem; text-transform: uppercase;
 .sc-declencheur span { width: 60px; height: 60px; border-radius: 50%; background: #fff; transition: transform .1s; }
 .sc-declencheur:active span { transform: scale(.88); }
 .sc-fini { justify-self: end; margin-left: 10px; padding: 10px 14px; font-size: .9rem; border-radius: 999px; background: #2563eb; color: #fff; font-weight: 800; white-space: nowrap; }
+
+.alerte { color: var(--bad); font-weight: 600; }
+details.aide { margin-top: 8px; font-size: .9rem; }
+details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; }
+
+/* Sujets connexes */
+.connexes h3 { margin-top: 0; }
+.cx-groupe { margin: 10px 0; }
+.cx-groupe small { display: block; color: var(--muted); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.cx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-chip { text-align: left; padding: 8px 12px; border-radius: 12px; background: var(--soft); border-left: 4px solid var(--c); font-size: .9rem; font-weight: 600; }
+.cx-type { color: var(--muted); font-weight: 700; font-size: .8rem; }
+.liees { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; font-size: .9rem; }
+.lien-fiche { padding: 6px 10px; border-radius: 999px; background: var(--card); border: 1.5px solid var(--line); font-size: .85rem; }
+
+/* Contrôles */
+.ctrl-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--card); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); border-left: 6px solid var(--c); }
+.ctrl-card .em { font-size: 1.8rem; }
+.ctrl-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ctrl-txt small { color: var(--muted); font-size: .82rem; }
+.ctrl-txt .bar { margin: 6px 0 2px; }
+.ctrl-card.passe { border-left-style: dashed; }
+.checks { display: grid; gap: 6px; margin-top: 6px; }
+.check { display: flex; align-items: center; gap: 10px; font-weight: 500; padding: 8px 10px; border-radius: 10px; background: var(--soft); }
+.check input { width: 20px; height: 20px; margin: 0; flex: none; }
+.rebours .big-num { font-size: 3rem; }
+h3.jour-actuel { color: var(--primary); }
+.taches { display: grid; gap: 8px; }
+.tache { display: flex; align-items: stretch; gap: 8px; }
+.coche { flex: none; width: 44px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); color: #fff; font-weight: 900; font-size: 1.1rem; }
+.tache.faite .coche { background: var(--good); border-color: var(--good); }
+.tache-txt { flex: 1; min-width: 0; text-align: left; padding: 12px 14px; border-radius: 12px; background: var(--card); box-shadow: var(--shadow); font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+.tache-txt span { color: var(--primary); }
+.tache.faite .tache-txt { color: var(--muted); text-decoration: line-through; }
+.note-row { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 1.4rem; font-weight: 800; margin: 10px 0; }
+.note-row input { width: 110px; text-align: center; font-size: 1.6rem; font-weight: 800; margin: 0; }

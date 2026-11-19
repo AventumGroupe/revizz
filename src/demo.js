@@ -68,6 +68,12 @@ En 1799, le général **Napoléon Bonaparte** prend le pouvoir par un coup d'Ét
     { terme: "Souveraineté nationale", definition: "Principe selon lequel le pouvoir appartient à la nation, c'est-à-dire aux citoyens." },
     { terme: "République", definition: "Régime politique sans roi, où les dirigeants sont choisis par les citoyens." },
   ],
+  connexes: [
+    { titre: "La société d'Ancien Régime et ses trois ordres", type: "prerequis", matiere: "Histoire-Géographie", pourquoi: "Pour comprendre ce que la Révolution renverse en 1789." },
+    { titre: "Les Lumières (Montesquieu, Rousseau, Voltaire)", type: "approfondissement", matiere: "Histoire-Géographie", pourquoi: "Leurs idées inspirent la DDHC et la séparation des pouvoirs." },
+    { titre: "Napoléon et l'Empire (1799-1815)", type: "approfondissement", matiere: "Histoire-Géographie", pourquoi: "La suite directe : ce que Bonaparte garde ou abandonne de la Révolution." },
+    { titre: "Citoyenneté et droits de l'homme", type: "autre_matiere", matiere: "EMC", pourquoi: "La DDHC fait toujours partie de la Constitution française d'aujourd'hui." },
+  ],
   astuce_memo: "« 89, la Bastille tombe ; 91, le roi accepte la Constitution ; 92, on passe à la République. » Les années vont de 2 en 2 : 89 → 91 → 92 (presque !).",
   flashcards: [
     { recto: "À quelle date s'ouvrent les États généraux convoqués par Louis XVI ?", verso: "Le 5 mai 1789, à Versailles." },
@@ -198,6 +204,12 @@ Si BC² ≠ AB² + AC² (BC étant le plus grand côté), alors le triangle **n'
     { terme: "Carré d'un nombre", definition: "Le nombre multiplié par lui-même : 5² = 5 × 5 = 25." },
     { terme: "Racine carrée", definition: "√25 = 5 car 5² = 25." },
     { terme: "Réciproque", definition: "Propriété qui « inverse » le théorème : on part des longueurs pour prouver l'angle droit." },
+  ],
+  connexes: [
+    { titre: "Carrés et racines carrées", type: "prerequis", matiere: "Mathématiques", pourquoi: "Le théorème s'écrit avec des carrés et se termine par une racine carrée." },
+    { titre: "Le cosinus dans le triangle rectangle", type: "approfondissement", matiere: "Mathématiques", pourquoi: "L'autre grand outil du triangle rectangle, pour calculer des angles." },
+    { titre: "Distance entre deux points dans un repère", type: "approfondissement", matiere: "Mathématiques", pourquoi: "En Seconde, la formule de la distance vient directement de Pythagore." },
+    { titre: "Le plan incliné et la décomposition des forces", type: "autre_matiere", matiere: "Physique-Chimie", pourquoi: "On y retrouve des triangles rectangles pour calculer des forces." },
   ],
   astuce_memo: "Triplets à connaître par cœur : 3-4-5, 6-8-10 et 5-12-13. Ils donnent toujours un triangle rectangle.",
   flashcards: [
@@ -359,6 +371,24 @@ export async function discuter(fiche, history, onProgress) {
     ? trouve[1](fiche)
     : `Bonne question ! En mode démo, je ne connais que quelques réponses préparées. Essaie un des boutons de suggestion.\n\nAvec une **clé API**, Claude répond vraiment à toutes tes questions sur « ${fiche.titre} ».`;
   return simuler(texte, onProgress, 1800);
+}
+
+export async function trouverConnexes(fiche, onProgress) {
+  await simuler("x".repeat(800), onProgress, 1200);
+  return contenu(fiche).fiche.connexes;
+}
+
+export async function miniFiche(fiche, connexe, onProgress) {
+  const texte = `## ${connexe.titre}
+**En bref :** voici une mini-fiche d'exemple. En mode démo, le contenu est préparé à l'avance.
+
+- **Ce qu'il faut savoir :** l'essentiel tient en 3 ou 4 idées, avec les mots clés en gras.
+- **Un exemple :** un cas concret pour fixer la notion.
+
+🔗 **Lien avec ton cours :** ${connexe.pourquoi}
+
+*Avec une clé ou le code famille, Claude rédige une vraie mini-fiche sur ce sujet.*`;
+  return simuler(texte, onProgress, 1500);
 }
 
 export async function testerCle() {

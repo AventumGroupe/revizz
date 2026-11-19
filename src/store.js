@@ -24,13 +24,20 @@ function write(key, value) {
   }
 }
 
-const DEFAULT_SETTINGS = { apiKey: "", prenom: "", classe: "Seconde", model: "claude-opus-5-5", demo: false };
-export const getSettings = () => ({ ...DEFAULT_SETTINGS, ...read(KEY_SETTINGS, {}) });
+// connexion : "serveur" (site Révizz sur Netlify + code famille, la clé reste sur le serveur) ou "cle" (clé API sur l'appareil).
+const DEFAULT_SETTINGS = { apiKey: "", prenom: "", classe: "Seconde", model: "claude-opus-5-5", demo: false, connexion: "serveur", serveur: "", code: "" };
+export function getSettings() {
+  const enregistres = read(KEY_SETTINGS, {});
+  // Versions précédentes : une clé API saisie sur l'appareil → on garde ce mode de connexion.
+  if (enregistres.apiKey && !enregistres.connexion) enregistres.connexion = "cle";
+  return { ...DEFAULT_SETTINGS, ...enregistres };
+}
 export const saveSettings = (s) => write(KEY_SETTINGS, { ...getSettings(), ...s });
 
 export const getFiches = () => read(KEY_FICHES, []);
 export const getFiche = (id) => getFiches().find((f) => f.id === id);
 export function saveFiche(fiche) {
+  fiche.maj = Date.now(); // sert à garder la version la plus récente lors d'une synchronisation
   const all = getFiches();
   const i = all.findIndex((f) => f.id === fiche.id);
   if (i >= 0) all[i] = fiche;

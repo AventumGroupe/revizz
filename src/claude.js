@@ -1,5 +1,6 @@
 // Tout ce qui parle à l'API Claude est ici.
 import Anthropic from "@anthropic-ai/sdk";
+import { Capacitor } from "@capacitor/core";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
 import { nomsPourClaude } from "./matieres.js";
@@ -13,11 +14,35 @@ export const MODELS = [
 // Les modèles qui acceptent le repli automatique côté serveur en cas de refus.
 const SUPPORTS_FALLBACK = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
 
+// Adresse du site Révizz : celle saisie, sinon (version web) le site lui-même, sinon celle fixée à la compilation.
+export function adresseServeur(s = getSettings()) {
+  if (s.serveur) return s.serveur.trim().replace(/\/+$/, "");
+  if (!Capacitor.isNativePlatform() && /^https?:$/.test(location.protocol)) return location.origin;
+  return (import.meta.env.VITE_REVIZZ_SERVEUR || "").replace(/\/+$/, "");
+}
+/** L'appli peut-elle appeler Claude ? (démo, clé personnelle, ou serveur + code famille) */
+export function estConfigure(s = getSettings()) {
+  if (s.demo) return true;
+  return s.connexion === "cle" ? !!s.apiKey : !!(s.code && adresseServeur(s));
+}
+
 function client() {
-  const { apiKey } = getSettings();
-  if (!apiKey) throw new Error("Ajoute d'abord ta clé API Claude dans les Réglages ⚙️.");
-  // L'appli tourne sur le téléphone : la clé reste sur l'appareil et part directement chez Anthropic.
-  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 3 });
+  const s = getSettings();
+  if (s.connexion === "cle") {
+    if (!s.apiKey) throw new Error("Ajoute d'abord ta clé API Claude dans les Réglages ⚙️.");
+    // Clé personnelle : elle reste sur l'appareil et part directement chez Anthropic.
+    return new Anthropic({ apiKey: s.apiKey, dangerouslyAllowBrowser: true, maxRetries: 3 });
+  }
+  const base = adresseServeur(s);
+  if (!base || !s.code) throw new Error("Saisis l'adresse du site Révizz et le code famille dans les Réglages ⚙️.");
+  // Serveur Révizz : la vraie clé est sur Netlify ; l'appareil n'envoie que le code famille.
+  return new Anthropic({
+    apiKey: "relais-revizz",
+    baseURL: `${base}/api/claude`,
+    dangerouslyAllowBrowser: true,
+    maxRetries: 3,
+    defaultHeaders: { "x-revizz-code": s.code },
+  });
 }
 
 // ---------- Éco-conception ----------
@@ -61,7 +86,11 @@ function baseParams({ effort, maxTokens, system }) {
 }
 
 function explainError(err) {
-  if (err instanceof Anthropic.AuthenticationError) return new Error("Clé API refusée. Vérifie-la dans les Réglages ⚙️.");
+  // Messages du serveur Révizz (code famille, configuration) : on les affiche tels quels.
+  if (err?.error?.error?.type === "revizz_error") return new Error(err.error.error.message);
+  if (err instanceof Anthropic.AuthenticationError)
+    return new Error(getSettings().connexion === "cle" ? "Clé API refusée. Vérifie-la dans les Réglages ⚙️." : "Le serveur Révizz refuse la clé API : vérifie ANTHROPIC_API_KEY dans Netlify.");
+  if (err instanceof Anthropic.NotFoundError && getSettings().connexion !== "cle") return new Error("Adresse du site Révizz introuvable : vérifie-la dans les Réglages ⚙️.");
   if (err instanceof Anthropic.PermissionDeniedError) return new Error("Cette clé n'a pas accès à ce modèle. Essaie un autre modèle dans les Réglages.");
   if (err instanceof Anthropic.RateLimitError) return new Error("Trop de demandes d'un coup. Attends une minute et réessaie.");
   if (err instanceof Anthropic.BadRequestError) {
@@ -148,6 +177,7 @@ const analyseSchema = () => obj({
   vocabulaire: arr(obj({ terme: str("Mot ou notion"), definition: str("Définition simple, une phrase") }), "Mots, dates et formules essentiels, 10 au maximum"),
   astuce_memo: str("Un moyen mnémotechnique court"),
   flashcards: arr(FLASHCARD, "12 à 20 flashcards couvrant tout le cours"),
+  connexes: arr(CONNEXE, CONNEXES_DESC),
 });
 
 const QCM_SCHEMA = obj({
@@ -171,6 +201,16 @@ const SUJET_SCHEMA = obj({
 
 const FLASHCARDS_SCHEMA = obj({ flashcards: arr(FLASHCARD, "Nouvelles flashcards") });
 
+// Sujets connexes : ce qu'il faut revoir avant, ce qui prolonge le cours, les liens avec d'autres matières.
+const CONNEXE = obj({
+  titre: str("Notion ou sujet, court et précis"),
+  type: { type: "string", enum: ["prerequis", "approfondissement", "autre_matiere"], description: "prerequis = à revoir avant ; approfondissement = pour aller plus loin ; autre_matiere = lien avec une autre matière" },
+  matiere: str("Matière de ce sujet"),
+  pourquoi: str("Le lien avec le cours, en une phrase"),
+});
+const CONNEXES_DESC = "3 à 5 sujets connexes : au moins un prérequis, un approfondissement et un lien avec une autre matière";
+const CONNEXES_SCHEMA = obj({ connexes: arr(CONNEXE, CONNEXES_DESC) });
+
 // ---------- Fonctions utilisées par l'appli ----------
 
 /**
@@ -189,6 +229,7 @@ async function analyserCoursClaude(pages, note, matiere, onProgress) {
       "1. Transcris fidèlement le contenu (corrige seulement les fautes évidentes de lecture) ; si une partie est illisible, écris [illisible].",
       "2. Rédige une fiche de révision synthétique : l'essentiel à apprendre, sans recopier la transcription.",
       "3. Ajoute les points clés, le vocabulaire essentiel, une astuce mémo et des flashcards.",
+      "4. Propose des sujets connexes adaptés au niveau de l'élève : une notion à revoir avant, une pour approfondir, un lien avec une autre matière.",
       REGLES_FLASHCARDS,
       matiere ? `Matière : ${matiere}.` : "",
       note ? `Précision de l'élève : ${note}` : "",
@@ -288,6 +329,34 @@ async function plusDeFlashcardsClaude(fiche, existantes, onProgress) {
   return data.flashcards;
 }
 
+async function trouverConnexesClaude(fiche, onProgress) {
+  const data = await runJSON(
+    {
+      ...baseParams({ effort: "low", maxTokens: 4000, system: systemCours(fiche) }),
+      messages: [{ role: "user", content: "Propose des sujets connexes à ce cours, adaptés au niveau de l'élève : une notion à revoir avant, une pour approfondir, un lien avec une autre matière." }],
+    },
+    CONNEXES_SCHEMA,
+    onProgress
+  );
+  return data.connexes;
+}
+
+const TYPES_CONNEXE = { prerequis: "à revoir avant ce cours", approfondissement: "pour aller plus loin", autre_matiere: "lien avec une autre matière" };
+async function miniFicheClaude(fiche, connexe, onProgress) {
+  return run(
+    {
+      ...baseParams({ effort: "low", maxTokens: 3000, system: systemCours(fiche) }),
+      messages: [
+        {
+          role: "user",
+          content: `Rédige une mini-fiche (12 lignes au plus, Markdown) sur « ${connexe.titre} » (${connexe.matiere}, ${TYPES_CONNEXE[connexe.type] || "sujet connexe"}) : définition simple, l'essentiel à savoir, un exemple, puis le lien avec le cours en une phrase.`,
+        },
+      ],
+    },
+    onProgress
+  );
+}
+
 /** history : [{ role: "user" | "assistant", content: string }] */
 async function discuterClaude(fiche, history, onProgress) {
   const system = systemCours(fiche);
@@ -314,3 +383,5 @@ export const corrigerCopie = choisir(corrigerCopieClaude, demo.corrigerCopie);
 export const plusDeFlashcards = choisir(plusDeFlashcardsClaude, demo.plusDeFlashcards);
 export const discuter = choisir(discuterClaude, demo.discuter);
 export const testerCle = choisir(testerCleClaude, demo.testerCle);
+export const trouverConnexes = choisir(trouverConnexesClaude, demo.trouverConnexes);
+export const miniFiche = choisir(miniFicheClaude, demo.miniFiche);
