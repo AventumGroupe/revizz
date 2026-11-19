@@ -8,6 +8,8 @@ Application Android de révision : on prend en photo une fiche ou un cahier, et 
 - **📄 Sujets d'entraînement** : interro express, contrôle, sujet type Brevet ou Bac, oral. Chaque sujet a un corrigé caché, et l'élève peut écrire sa copie pour la faire **noter sur 20** avec des conseils.
 - **💬 Prof** : un professeur particulier qui répond aux questions sur le cours.
 
+- **🗂️ Classement par matière** : l'accueil montre une tuile par matière (icône, nombre de fiches, cartes à revoir). Dans une matière, les fiches sont rangées par chapitre, avec un bouton pour réviser les cartes de cette matière seulement. Au scan, on peut choisir la matière ou laisser Claude la détecter. Toucher le titre d'une fiche permet de changer sa matière, son chapitre ou son titre.
+
 Les fiches restent sur le téléphone. Les photos ne sont pas conservées : seul le texte est gardé.
 
 ## Essayer sans clé : le mode démo
@@ -68,6 +70,7 @@ npm run android:apk    # compile l'APK (Android SDK requis), sortie : android/ap
 Structure :
 
 - `src/claude.js` : tous les appels à l'API Claude (SDK officiel `@anthropic-ai/sdk`, réponses en streaming, sorties JSON structurées, repli automatique si un modèle refuse).
+- `src/matieres.js` : liste des matières (icône, couleur) et rattachement des anciennes fiches.
 - `src/demo.js` : contenu et réponses du mode démo.
 - `src/store.js` : stockage local, répétition espacée (boîtes de Leitner), série de jours.
 - `src/main.js` : les écrans.

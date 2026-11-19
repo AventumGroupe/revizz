@@ -152,3 +152,12 @@ details summary { font-weight: 700; color: var(--primary); }
 .modal-box p { margin: 0 0 8px; font-weight: 600; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .done .keys { text-align: left; }
+
+.matieres { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.matiere-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 14px; border-radius: 16px; background: var(--card); box-shadow: var(--shadow); border-top: 5px solid var(--c); min-width: 0; }
+.matiere-tile .em { font-size: 1.6rem; line-height: 1.2; }
+.matiere-tile b { font-size: .98rem; overflow-wrap: anywhere; }
+.matiere-tile small { color: var(--muted); font-size: .8rem; }
+.title-edit { text-align: left; padding: 4px 6px; margin: -4px -6px; border-radius: 10px; min-width: 0; }
+.title-edit:focus-visible, .matiere-tile:focus-visible, .fiche-card:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+h3.chapitre { color: var(--muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; margin-top: 20px; }

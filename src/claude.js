@@ -2,6 +2,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
+import { NOMS_MATIERES } from "./matieres.js";
 
 export const MODELS = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 (le plus intelligent, recommandé)" },
@@ -138,8 +139,8 @@ const REGLES_FLASHCARDS = `Règles pour chaque flashcard :
 
 const ANALYSE_SCHEMA = obj({
   titre: str("Titre court du cours"),
-  matiere: str("Matière scolaire, ex : Histoire-Géographie, Mathématiques, SVT, Français, Anglais, Physique-Chimie"),
-  chapitre: str("Chapitre ou thème, vide si inconnu"),
+  matiere: { type: "string", enum: NOMS_MATIERES, description: "Matière scolaire" },
+  chapitre: str("Chapitre ou grand thème du programme, court (ex : « La Révolution française », « Théorème de Pythagore »)"),
   transcription: str("Texte fidèle et complet des pages, remis en ordre, en Markdown sobre"),
   resume: str("Fiche de révision synthétique en Markdown (pas une copie de la transcription)"),
   points_cles: arr(str("Une idée clé, une phrase"), "4 à 8 idées clés"),
@@ -174,7 +175,7 @@ const FLASHCARDS_SCHEMA = obj({ flashcards: arr(FLASHCARD, "Nouvelles flashcards
 /**
  * pages : [{ kind: "image", mediaType, data }] ou [{ kind: "pdf", data }] (base64 sans préfixe)
  */
-async function analyserCoursClaude(pages, note, onProgress) {
+async function analyserCoursClaude(pages, note, matiere, onProgress) {
   const content = pages.map((p) =>
     p.kind === "pdf"
       ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } }
@@ -188,6 +189,7 @@ async function analyserCoursClaude(pages, note, onProgress) {
       "2. Rédige une fiche de révision synthétique : l'essentiel à apprendre, sans recopier la transcription.",
       "3. Ajoute les points clés, le vocabulaire essentiel, une astuce mémo et des flashcards.",
       REGLES_FLASHCARDS,
+      matiere ? `Matière : ${matiere}.` : "",
       note ? `Précision de l'élève : ${note}` : "",
     ].join("\n"),
   });

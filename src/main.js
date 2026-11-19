@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import * as store from "./store.js";
 import * as ai from "./claude.js";
 import { ficheDeDepart } from "./demo.js";
+import { MATIERES, NOMS_MATIERES, normaliserMatiere, couleur, emoji } from "./matieres.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
 const DEMO_ONLY = import.meta.env.VITE_DEMO_ONLY === "1";
@@ -23,15 +24,6 @@ const shuffle = (a) => {
   }
   return b;
 };
-const COULEURS = {
-  math: "#0f9d8a", fran: "#e17055", hist: "#d4a017", géo: "#d4a017", svt: "#2f9e44", phys: "#1c7ed6",
-  chim: "#1c7ed6", angl: "#e84393", espa: "#fd79a8", allem: "#fd79a8", philo: "#636e72", éco: "#00cec9", ses: "#00cec9", tech: "#74b9ff",
-};
-const couleur = (matiere = "") => {
-  const m = matiere.toLowerCase();
-  for (const k in COULEURS) if (m.includes(k)) return COULEURS[k];
-  return "#64748b";
-};
 // Fenêtre de confirmation intégrée (les fenêtres du navigateur ne marchent pas partout).
 function confirmer(message, libelleOk = "Supprimer") {
   return new Promise((resolve) => {
@@ -48,6 +40,16 @@ function confirmer(message, libelleOk = "Supprimer") {
     document.body.appendChild(d);
   });
 }
+// Fenêtre intégrée avec un contenu libre ; bind(boîte, fermer) branche les boutons.
+function modale(html, bind) {
+  const d = document.createElement("div");
+  d.className = "modal";
+  d.innerHTML = `<div class="modal-box" role="dialog" aria-modal="true">${html}</div>`;
+  const fermer = () => d.remove();
+  d.onclick = (e) => e.target === d && fermer();
+  document.body.appendChild(d);
+  bind(d.querySelector(".modal-box"), fermer);
+}
 function toast(msg) {
   const t = document.createElement("div");
   t.className = "toast";
@@ -57,14 +59,21 @@ function toast(msg) {
 }
 
 // ---------- Navigation ----------
-let ui = { view: "home", ficheId: null, tab: "resume", filtre: "Toutes" };
+let ui = { view: "home", ficheId: null, tab: "resume", matiere: null, retour: "home" };
 const go = (patch) => {
   ui = { ...ui, ...patch };
   render();
   window.scrollTo(0, 0);
 };
 function back() {
-  if (ui.view === "fiche" || ui.view === "scan" || ui.view === "settings" || ui.view === "revision") go({ view: "home" });
+  if (ui.view === "fiche" || ui.view === "scan" || ui.view === "revision") go({ view: ui.retour });
+  else if (ui.view === "settings" || ui.view === "matiere") go({ view: "home", matiere: null });
+}
+
+// Remet les anciennes fiches (matière en texte libre) dans la liste fixe des matières.
+for (const f of store.getFiches()) {
+  const m = normaliserMatiere(f.matiere);
+  if (m !== f.matiere) store.saveFiche({ ...f, matiere: m });
 }
 // Bouton retour d'Android : revient à l'accueil, ou quitte l'appli depuis l'accueil.
 if (Capacitor.isNativePlatform()) {
@@ -87,7 +96,7 @@ function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
   if (!s.apiKey && !s.demo && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, scan, fiche: ficheView, settings, revision };
+  const views = { welcome, home, matiere: matiereView, scan, fiche: ficheView, settings, revision };
   app.innerHTML = views[ui.view]();
   afterRender[ui.view]?.();
 }
@@ -118,8 +127,7 @@ function home() {
   const fiches = store.getFiches();
   const stats = store.getStats();
   const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
-  const matieres = ["Toutes", ...new Set(fiches.map((f) => f.matiere))];
-  const liste = fiches.filter((f) => ui.filtre === "Toutes" || f.matiere === ui.filtre);
+  const recentes = [...fiches].sort((a, b) => (b.vue || b.cree) - (a.vue || a.cree)).slice(0, 3);
   return `
   <header class="top">
     <div>
@@ -136,37 +144,81 @@ function home() {
     <div class="stat"><b>🃏 ${dues}</b><span>carte${dues > 1 ? "s" : ""} à revoir</span></div>
   </section>
 
-  <button class="btn primary big-btn" data-go="scan">📸 Scanner une fiche</button>
-  ${dues ? `<button class="btn secondary big-btn" data-go="revision">🃏 Révision du jour (${dues} cartes)</button>` : ""}
+  <button class="btn primary big-btn" data-scan="">📸 Scanner une fiche</button>
+  ${dues ? `<button class="btn secondary big-btn" data-revision="">🃏 Révision du jour (${dues} cartes)</button>` : ""}
 
   ${
     fiches.length
-      ? `<div class="chips">${matieres
-          .map((m) => `<button class="chip ${m === ui.filtre ? "on" : ""}" data-filtre="${esc(m)}">${esc(m)}</button>`)
-          .join("")}</div>
-         <div class="list">${liste.map(carteFiche).join("")}</div>`
+      ? `<h3>Mes matières</h3>
+         <div class="matieres">${grilleMatieres(fiches)}</div>
+         <h3>Vues récemment</h3>
+         <div class="list">${recentes.map((f) => carteFiche(f, true)).join("")}</div>`
       : `<div class="empty">Aucune fiche pour l'instant.<br>Commence par scanner ton premier cours !</div>`
   }`;
 }
-function carteFiche(f) {
+// Une tuile par matière qui a au moins une fiche, dans l'ordre de la liste.
+function grilleMatieres(fiches) {
+  return MATIERES.filter((m) => fiches.some((f) => f.matiere === m.nom))
+    .map((m) => {
+      const siennes = fiches.filter((f) => f.matiere === m.nom);
+      const dues = siennes.reduce((n, f) => n + store.cartesDues(f).length, 0);
+      return `<button class="matiere-tile" data-matiere="${esc(m.nom)}" style="--c:${m.couleur}">
+        <span class="em">${m.emoji}</span>
+        <b>${esc(m.nom)}</b>
+        <small>${siennes.length} fiche${siennes.length > 1 ? "s" : ""}${dues ? ` · ${dues} à revoir` : ""}</small>
+      </button>`;
+    })
+    .join("");
+}
+function carteFiche(f, avecMatiere = false) {
   const m = store.maitrise(f);
   const d = store.cartesDues(f).length;
   return `
   <button class="fiche-card" data-open="${f.id}" style="--c:${couleur(f.matiere)}">
-    <div class="tag">${esc(f.matiere)}</div>
+    <div class="tag">${avecMatiere ? `${emoji(f.matiere)} ${esc(f.matiere)}${f.chapitre ? " · " + esc(f.chapitre) : ""}` : esc(f.chapitre || "Sans chapitre")}</div>
     <div class="titre">${esc(f.titre)}</div>
     <div class="meta">${f.flashcards.length} cartes · ${d ? `${d} à revoir` : "à jour ✅"}</div>
     <div class="bar"><i style="width:${m}%"></i></div>
   </button>`;
 }
 
+// ---------- Une matière ----------
+function matiereView() {
+  const nom = ui.matiere;
+  const fiches = store.getFiches().filter((f) => f.matiere === nom);
+  if (!fiches.length) {
+    ui.view = "home";
+    return home();
+  }
+  const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
+  // Regroupe par chapitre ; les chapitres sont triés par ordre alphabétique, les fiches par date.
+  const chapitres = {};
+  for (const f of fiches) (chapitres[f.chapitre || "Sans chapitre"] ||= []).push(f);
+  const groupes = Object.entries(chapitres).sort(([a], [b]) => a.localeCompare(b, "fr"));
+  return `
+  <header class="top" style="--c:${couleur(nom)}">
+    <button class="icon" data-go="home">←</button>
+    <div class="title"><small>${fiches.length} fiche${fiches.length > 1 ? "s" : ""}</small>${emoji(nom)} ${esc(nom)}</div>
+    <span></span>
+  </header>
+  ${dues ? `<button class="btn primary big-btn" data-revision="${esc(nom)}">🃏 Réviser les cartes de ${esc(nom)} (${dues})</button>` : `<div class="card center">✅ Toutes les cartes de ${esc(nom)} sont à jour.</div>`}
+  <button class="btn secondary big-btn" data-scan="${esc(nom)}">📸 Ajouter une fiche de ${esc(nom)}</button>
+  ${groupes
+    .map(
+      ([chap, liste]) => `<h3 class="chapitre">${esc(chap)}</h3>
+      <div class="list">${liste.sort((a, b) => b.cree - a.cree).map((f) => carteFiche(f)).join("")}</div>`
+    )
+    .join("")}`;
+}
+
 // ---------- Scanner ----------
 let pages = [];
 let scanNote = "";
+let scanMatiere = ""; // vide = détection automatique
 let analyseEnCours = false;
 function scan() {
   return `
-  <header class="top"><button class="icon" data-go="home">←</button><div class="title">Nouvelle fiche</div><span></span></header>
+  <header class="top"><button class="icon" data-back>←</button><div class="title">Nouvelle fiche</div><span></span></header>
   <p class="hint">Prends une photo par page, bien à plat et bien éclairée. Tu peux ajouter plusieurs pages ou un PDF.</p>
   <div class="pages">
     ${pages
@@ -181,6 +233,12 @@ function scan() {
   </div>
   <input type="file" id="file-import" accept="image/*,application/pdf" multiple hidden>
   <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
+  <label class="field">Matière
+    <select id="scan-matiere">
+      <option value="">✨ Détecter automatiquement</option>
+      ${MATIERES.map((m) => `<option value="${esc(m.nom)}" ${m.nom === scanMatiere ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("")}
+    </select>
+  </label>
   <label class="field">Une précision pour Claude ? (facultatif)
     <input id="note" placeholder="ex : chapitre 3, contrôle vendredi sur la partie 2" value="${esc(scanNote)}">
   </label>
@@ -190,6 +248,7 @@ function scan() {
 afterRender.scan = () => {
   const $ = (id) => document.getElementById(id);
   $("note").oninput = (e) => (scanNote = e.target.value);
+  $("scan-matiere").onchange = (e) => (scanMatiere = e.target.value);
   $("btn-import").onclick = () => $("file-import").click();
   $("btn-photo").onclick = prendrePhoto;
   $("file-import").onchange = (e) => ajouterFichiers(e.target.files);
@@ -271,7 +330,7 @@ function nouvelleFiche(r) {
     cree: Date.now(),
     demoKey: r.demoKey,
     titre: r.titre,
-    matiere: r.matiere || "Autre",
+    matiere: normaliserMatiere(r.matiere),
     chapitre: r.chapitre,
     transcription: r.transcription,
     resume: r.resume,
@@ -292,12 +351,14 @@ async function analyser() {
   btn.disabled = true;
   const p = progressUI(document.getElementById("progress"));
   try {
-    const r = await ai.analyserCours(pages, scanNote, p.update);
+    const r = await ai.analyserCours(pages, scanNote, scanMatiere, p.update);
+    if (scanMatiere) r.matiere = scanMatiere;
     const fiche = nouvelleFiche(r);
     store.saveFiche(fiche);
     pages = [];
     scanNote = "";
-    go({ view: "fiche", ficheId: fiche.id, tab: "resume" });
+    scanMatiere = "";
+    go({ view: "fiche", ficheId: fiche.id, tab: "resume", ...(ui.retour === "matiere" ? { matiere: fiche.matiere } : {}) });
     toast("Fiche créée ! 🎉");
   } catch (e) {
     document.getElementById("progress").innerHTML = `<div class="error">${esc(e.message)}</div>`;
@@ -322,8 +383,8 @@ function ficheView() {
   const body = { resume: tabResume, cartes: tabCartes, qcm: tabQCM, sujet: tabSujet, prof: tabProf }[ui.tab](f);
   return `
   <header class="top" style="--c:${couleur(f.matiere)}">
-    <button class="icon" data-go="home">←</button>
-    <div class="title"><small>${esc(f.matiere)}</small>${esc(f.titre)}</div>
+    <button class="icon" data-back>←</button>
+    <button class="title title-edit" id="btn-edit" aria-label="Modifier la matière, le chapitre ou le titre"><small>${emoji(f.matiere)} ${esc(f.matiere)}${f.chapitre ? " · " + esc(f.chapitre) : ""} ✏️</small>${esc(f.titre)}</button>
     <button class="icon" id="btn-suppr" aria-label="Supprimer">🗑️</button>
   </header>
   <nav class="tabs">${TABS.map(([k, i, l]) => `<button class="${ui.tab === k ? "on" : ""}" data-tab="${k}"><span>${i}</span>${l}</button>`).join("")}</nav>
@@ -335,11 +396,43 @@ afterRender.fiche = () => {
   document.getElementById("btn-suppr").onclick = async () => {
     if (await confirmer(`Supprimer la fiche « ${f.titre} » ?`)) {
       store.deleteFiche(f.id);
-      go({ view: "home" });
+      go({ view: ui.retour });
     }
   };
+  document.getElementById("btn-edit").onclick = () => editerFiche(f);
   ({ cartes: bindCartes, qcm: bindQCM, sujet: bindSujet, prof: bindProf, resume: bindResume })[ui.tab]?.(f);
 };
+
+// --- Classer : matière, chapitre, titre
+function editerFiche(f) {
+  const chapitres = [...new Set(store.getFiches().map((x) => x.chapitre).filter(Boolean))];
+  modale(
+    `<h3>Classer la fiche</h3>
+    <label class="field">Matière
+      <select id="ed-matiere">${MATIERES.map((m) => `<option value="${esc(m.nom)}" ${m.nom === f.matiere ? "selected" : ""}>${m.emoji} ${esc(m.nom)}</option>`).join("")}</select>
+    </label>
+    <label class="field">Chapitre
+      <input id="ed-chapitre" list="ed-chapitres" value="${esc(f.chapitre || "")}" placeholder="ex : La Révolution française">
+      <datalist id="ed-chapitres">${chapitres.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+    </label>
+    <label class="field">Titre<input id="ed-titre" value="${esc(f.titre)}"></label>
+    <div class="row"><button class="btn secondary" id="ed-annuler">Annuler</button><button class="btn primary" id="ed-ok">Enregistrer</button></div>`,
+    (box, fermer) => {
+      box.querySelector("#ed-annuler").onclick = fermer;
+      box.querySelector("#ed-ok").onclick = () => {
+        const fiche = store.getFiche(f.id);
+        fiche.matiere = box.querySelector("#ed-matiere").value;
+        fiche.chapitre = box.querySelector("#ed-chapitre").value.trim();
+        fiche.titre = box.querySelector("#ed-titre").value.trim() || fiche.titre;
+        store.saveFiche(fiche);
+        fermer();
+        if (ui.retour === "matiere") ui.matiere = fiche.matiere;
+        toast("Fiche classée ✅");
+        render();
+      };
+    }
+  );
+}
 
 // --- Résumé
 function tabResume(f) {
@@ -470,20 +563,23 @@ function bindSession(s, onEnd) {
   if ($("ko")) $("ko").onclick = () => noter(false);
 }
 
-// --- Révision du jour (toutes matières)
+// --- Révision du jour (toutes matières, ou une seule)
 let sessionJour = null;
 function revision() {
   if (!sessionJour) {
-    const cartes = store.getFiches().flatMap((f) => store.cartesDues(f).map((c) => ({ ...c, ficheId: f.id })));
+    const cartes = store
+      .getFiches()
+      .filter((f) => !ui.revMatiere || f.matiere === ui.revMatiere)
+      .flatMap((f) => store.cartesDues(f).map((c) => ({ ...c, ficheId: f.id })));
     sessionJour = { cartes: shuffle(cartes).slice(0, 40), i: 0, retourne: false, sues: 0 };
   }
-  return `<header class="top"><button class="icon" data-go="home">←</button><div class="title">Révision du jour</div><span></span></header>
+  return `<header class="top"><button class="icon" data-back>←</button><div class="title">${ui.revMatiere ? `<small>${emoji(ui.revMatiere)} ${esc(ui.revMatiere)}</small>` : ""}Révision du jour</div><span></span></header>
   ${sessionCartes(null, sessionJour)}`;
 }
 afterRender.revision = () =>
   bindSession(sessionJour, () => {
     sessionJour = null;
-    go({ view: "home" });
+    go({ view: ui.retour });
   });
 
 // --- QCM
@@ -839,12 +935,25 @@ afterRender.settings = () => {
 
 // ---------- Clics globaux ----------
 app.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-go],[data-open],[data-tab],[data-filtre],[data-delpage]");
+  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage]");
   if (!t) return;
-  if (t.dataset.go) go({ view: t.dataset.go });
-  else if (t.dataset.open) go({ view: "fiche", ficheId: t.dataset.open, tab: "resume" });
-  else if (t.dataset.tab) go({ tab: t.dataset.tab });
-  else if (t.dataset.filtre) go({ filtre: t.dataset.filtre });
+  // D'où vient-on ? (pour que « ← » ramène à la matière ou à l'accueil)
+  const origine = ui.view === "matiere" ? "matiere" : "home";
+  if (t.dataset.go) go({ view: t.dataset.go, ...(t.dataset.go === "home" ? { matiere: null } : {}) });
+  else if (t.dataset.back !== undefined) back();
+  else if (t.dataset.open) {
+    const f = store.getFiche(t.dataset.open);
+    if (f) store.saveFiche({ ...f, vue: Date.now() });
+    go({ view: "fiche", ficheId: t.dataset.open, tab: "resume", retour: origine });
+  } else if (t.dataset.tab) go({ tab: t.dataset.tab });
+  else if (t.dataset.matiere) go({ view: "matiere", matiere: t.dataset.matiere });
+  else if (t.dataset.scan !== undefined) {
+    scanMatiere = t.dataset.scan;
+    go({ view: "scan", retour: origine });
+  } else if (t.dataset.revision !== undefined) {
+    sessionJour = null;
+    go({ view: "revision", revMatiere: t.dataset.revision || null, retour: origine });
+  }
   else if (t.dataset.delpage !== undefined) {
     pages.splice(+t.dataset.delpage, 1);
     render();

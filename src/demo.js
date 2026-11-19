@@ -19,7 +19,7 @@ const HISTOIRE = {
   demoKey: "histoire",
   titre: "La Révolution française (1789-1799)",
   matiere: "Histoire-Géographie",
-  chapitre: "Chapitre 3 : la Révolution et l'Empire",
+  chapitre: "La Révolution et l'Empire",
   transcription: `## La Révolution française
 ### I. 1789 : la fin de la monarchie absolue
 En 1789, la France est en crise : les caisses de l'État sont vides et le tiers état paie presque tous les impôts. Louis XVI convoque les **États généraux** (5 mai 1789).
@@ -154,7 +154,7 @@ const MATHS = {
   demoKey: "maths",
   titre: "Le théorème de Pythagore",
   matiere: "Mathématiques",
-  chapitre: "Géométrie : triangles rectangles",
+  chapitre: "Triangles rectangles",
   transcription: `## Théorème de Pythagore
 **Propriété** : si un triangle est rectangle, alors le carré de la longueur de l'hypoténuse est égal à la somme des carrés des longueurs des deux autres côtés.
 Si ABC est rectangle en A, alors **BC² = AB² + AC²**.
@@ -270,7 +270,7 @@ export function ficheDeDepart() {
   return HISTOIRE;
 }
 
-export async function analyserCours(_pages, _note, onProgress) {
+export async function analyserCours(_pages, _note, _matiere, onProgress) {
   await simuler("x".repeat(9000), onProgress, 6000);
   return MATHS;
 }
