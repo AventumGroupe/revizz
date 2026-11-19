@@ -1,6 +1,6 @@
 // Tout ce qui parle à l'API Claude est ici.
 import Anthropic from "@anthropic-ai/sdk";
-import { getSettings } from "./store.js";
+import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
 
 export const MODELS = [
@@ -19,28 +19,39 @@ function client() {
   return new Anthropic({ apiKey, dangerouslyAllowBrowser: true, maxRetries: 3 });
 }
 
-function systemPrompt() {
+// ---------- Éco-conception ----------
+// - Le cours est placé dans le prompt système et mis en cache : QCM, sujets, cartes et prof
+//   relisent ce début de requête depuis le cache (10 % du prix, beaucoup moins de calcul).
+// - Seule la transcription sert de référence (la fiche résumé n'est pas renvoyée en double).
+// - L'effort de réflexion est réglé au plus juste pour chaque tâche.
+// - Les sorties demandées sont courtes et sans répétition.
+
+function consignes() {
   const { prenom, classe } = getSettings();
   return [
-    `Tu es Révizz, un professeur particulier bienveillant et exigeant qui aide ${prenom || "un élève"} (niveau : ${classe || "collège/lycée"}) à réussir à l'école en France.`,
-    "Tu t'adresses à l'élève en le tutoyant, avec des phrases claires et adaptées à son niveau.",
-    "Tu respectes les programmes de l'Éducation nationale et le vocabulaire utilisé en classe.",
-    "Tu restes fidèle au contenu du cours fourni : tu n'inventes pas de notions absentes, sauf pour compléter une explication de façon exacte.",
-    "Pour les formules, écris en texte simple avec des symboles Unicode (x², √, π, ≤, →, H₂O), jamais en LaTeX.",
-    "Quand tu écris du Markdown, utilise des titres courts (##), des listes et du **gras** pour les mots importants.",
+    `Tu es Révizz, professeur particulier bienveillant et exigeant de ${prenom || "un élève"} (niveau : ${classe || "collège/lycée"}), en France.`,
+    "Tutoie l'élève. Phrases claires, adaptées à son niveau, vocabulaire des programmes de l'Éducation nationale.",
+    "Reste fidèle au cours fourni ; n'invente pas de notions absentes, sauf pour compléter une explication de façon exacte.",
+    "Formules en texte simple avec symboles Unicode (x², √, π, ≤, →, H₂O), jamais en LaTeX.",
+    "Markdown : titres courts (##), listes, **gras** pour les mots importants. Sois concis : pas de répétition ni de formule de politesse.",
   ].join("\n");
 }
 
-function baseParams({ effort = "medium", maxTokens = 32000 } = {}) {
+// Prompt système pour les tâches sur une fiche : consignes + cours, avec un point de cache après le cours.
+function systemCours(fiche) {
+  return [
+    { type: "text", text: consignes() },
+    {
+      type: "text",
+      text: `<cours titre="${fiche.titre}" matiere="${fiche.matiere}"${fiche.chapitre ? ` chapitre="${fiche.chapitre}"` : ""}>\n${fiche.transcription}\n</cours>`,
+      cache_control: { type: "ephemeral" },
+    },
+  ];
+}
+
+function baseParams({ effort, maxTokens, system }) {
   const { model } = getSettings();
-  const params = {
-    model,
-    max_tokens: maxTokens,
-    system: systemPrompt(),
-    output_config: { effort },
-    // Met en cache le début de la requête : les questions suivantes sur le même cours coûtent moins cher.
-    cache_control: { type: "ephemeral" },
-  };
+  const params = { model, max_tokens: maxTokens, system: system ?? consignes(), output_config: { effort } };
   if (SUPPORTS_FALLBACK.has(model)) {
     params.betas = ["server-side-fallback-2026-07-01"];
     params.fallbacks = "default";
@@ -83,6 +94,7 @@ async function run(params, onProgress) {
       onProgress?.(chars, acc);
     });
     const message = await stream.finalMessage();
+    enregistrerConso(message.usage);
     checkStop(message);
     return textOf(message);
   } catch (err) {
@@ -111,27 +123,38 @@ const obj = (properties) => ({
 const str = (description) => ({ type: "string", description });
 const arr = (items, description) => ({ type: "array", items, description });
 
-const FLASHCARD = obj({ recto: str("Question ou notion, courte"), verso: str("Réponse précise et courte") });
+const FLASHCARD = obj({
+  recto: str("Question complète et précise, compréhensible sans le cours sous les yeux"),
+  verso: str("Réponse exacte en 1 ou 2 phrases, mot-clé en premier"),
+});
+
+// Règles communes pour des flashcards précises.
+const REGLES_FLASHCARDS = `Règles pour chaque flashcard :
+- Le recto est une question complète et autonome : nomme le sujet précis (personnage, événement, lieu, notion, chapitre). Exemple : « En quelle année a eu lieu la prise de la Bastille ? » et non « Quelle date ? » ; « Que dit le théorème de Pythagore dans un triangle ABC rectangle en A ? » et non « Que dit le théorème ? ».
+- Une seule notion par carte, et une seule bonne réponse possible.
+- Interdit : questions vagues (« Explique… », « Parle de… », « Que sais-tu de… »), questions oui/non, renvois au document (« d'après le cours », « dans ce texte »), pronoms sans référent (« il », « cela »).
+- Le verso répond exactement à la question, en 1 ou 2 phrases.
+- Varie les types : définition, date, acteur, cause, conséquence, exemple, formule, application.`;
 
 const ANALYSE_SCHEMA = obj({
   titre: str("Titre court du cours"),
   matiere: str("Matière scolaire, ex : Histoire-Géographie, Mathématiques, SVT, Français, Anglais, Physique-Chimie"),
   chapitre: str("Chapitre ou thème, vide si inconnu"),
-  transcription: str("Transcription fidèle et complète du texte des pages, remise en ordre, en Markdown"),
-  resume: str("Fiche de révision en Markdown : l'essentiel du cours, structuré, facile à apprendre"),
-  points_cles: arr(str("Une idée clé à retenir"), "5 à 10 idées clés"),
-  vocabulaire: arr(obj({ terme: str("Mot ou notion"), definition: str("Définition simple") }), "Mots et notions à connaître, dates et formules incluses"),
-  astuce_memo: str("Un moyen mnémotechnique ou une astuce pour retenir le cours"),
-  flashcards: arr(FLASHCARD, "15 à 25 flashcards couvrant tout le cours"),
+  transcription: str("Texte fidèle et complet des pages, remis en ordre, en Markdown sobre"),
+  resume: str("Fiche de révision synthétique en Markdown (pas une copie de la transcription)"),
+  points_cles: arr(str("Une idée clé, une phrase"), "4 à 8 idées clés"),
+  vocabulaire: arr(obj({ terme: str("Mot ou notion"), definition: str("Définition simple, une phrase") }), "Mots, dates et formules essentiels, 10 au maximum"),
+  astuce_memo: str("Un moyen mnémotechnique court"),
+  flashcards: arr(FLASHCARD, "12 à 20 flashcards couvrant tout le cours"),
 });
 
 const QCM_SCHEMA = obj({
   questions: arr(
     obj({
-      question: str("Énoncé de la question"),
-      choix: arr(str("Proposition"), "Exactement 4 propositions"),
+      question: str("Énoncé précis et autonome"),
+      choix: arr(str("Proposition courte"), "Exactement 4 propositions"),
       bonne_reponse: { type: "integer", description: "Indice (0 à 3) de la bonne proposition" },
-      explication: str("Pourquoi c'est la bonne réponse, en 1 à 3 phrases"),
+      explication: str("Pourquoi c'est la bonne réponse, en 1 ou 2 phrases"),
     }),
     "Les questions du QCM"
   ),
@@ -141,7 +164,7 @@ const SUJET_SCHEMA = obj({
   titre: str("Titre du sujet"),
   duree: str("Durée conseillée, ex : 30 min"),
   sujet: str("Énoncé complet en Markdown, avec les points de chaque exercice"),
-  corrige: str("Corrigé détaillé en Markdown, avec la méthode et les erreurs à éviter"),
+  corrige: str("Corrigé en Markdown : réponses attendues, méthode, erreurs à éviter"),
 });
 
 const FLASHCARDS_SCHEMA = obj({ flashcards: arr(FLASHCARD, "Nouvelles flashcards") });
@@ -161,22 +184,19 @@ async function analyserCoursClaude(pages, note, onProgress) {
     type: "text",
     text: [
       `Voici ${pages.length > 1 ? `les ${pages.length} pages` : "la page"} d'une fiche ou d'un cours (photo, parfois manuscrite).`,
-      "1. Transcris fidèlement tout le contenu (corrige seulement les fautes évidentes de lecture).",
-      "2. Rédige une fiche de révision claire pour apprendre ce cours.",
-      "3. Liste les points clés, le vocabulaire, une astuce mémo et des flashcards.",
-      "Si une partie est illisible, indique [illisible] plutôt que d'inventer.",
+      "1. Transcris fidèlement le contenu (corrige seulement les fautes évidentes de lecture) ; si une partie est illisible, écris [illisible].",
+      "2. Rédige une fiche de révision synthétique : l'essentiel à apprendre, sans recopier la transcription.",
+      "3. Ajoute les points clés, le vocabulaire essentiel, une astuce mémo et des flashcards.",
+      REGLES_FLASHCARDS,
       note ? `Précision de l'élève : ${note}` : "",
     ].join("\n"),
   });
+  // Lecture de l'écriture manuscrite : on garde un effort moyen pour la fiabilité.
   return runJSON(
-    { ...baseParams({ effort: "medium", maxTokens: 48000 }), messages: [{ role: "user", content }] },
+    { ...baseParams({ effort: "medium", maxTokens: 32000 }), messages: [{ role: "user", content }] },
     ANALYSE_SCHEMA,
     onProgress
   );
-}
-
-function coursMessage(fiche) {
-  return `<cours titre="${fiche.titre}" matiere="${fiche.matiere}">\n${fiche.transcription}\n\n## Fiche de révision\n${fiche.resume}\n</cours>`;
 }
 
 const NIVEAUX = {
@@ -184,18 +204,19 @@ const NIVEAUX = {
   moyen: "de difficulté moyenne, comme dans un contrôle en classe",
   difficile: "difficiles : pièges classiques, application et raisonnement",
 };
+const court = (t, n = 80) => (t.length > n ? t.slice(0, n) + "…" : t);
 
 async function genererQCMClaude(fiche, niveau, nombre, dejaPosees, onProgress) {
   const deja = dejaPosees.length
-    ? `\nNe repose pas ces questions déjà vues :\n${dejaPosees.slice(-40).map((q) => "- " + q).join("\n")}`
+    ? `\nÉvite ces questions déjà posées :\n${dejaPosees.slice(-20).map((q) => "- " + court(q)).join("\n")}`
     : "";
   const data = await runJSON(
     {
-      ...baseParams({ effort: "medium", maxTokens: 24000 }),
+      ...baseParams({ effort: "low", maxTokens: 16000, system: systemCours(fiche) }),
       messages: [
         {
           role: "user",
-          content: `${coursMessage(fiche)}\n\nCrée un QCM de ${nombre} questions ${NIVEAUX[niveau]}. Chaque question a exactement 4 propositions plausibles et une seule bonne réponse. Varie la position de la bonne réponse.${deja}`,
+          content: `Crée un QCM de ${nombre} questions ${NIVEAUX[niveau]} sur le cours. Chaque question est précise et autonome (elle nomme le sujet), avec exactement 4 propositions plausibles et une seule bonne réponse. Varie la position de la bonne réponse.${deja}`,
         },
       ],
     },
@@ -219,11 +240,11 @@ export const TYPES_SUJET = {
 async function genererSujetClaude(fiche, type, onProgress) {
   return runJSON(
     {
-      ...baseParams({ effort: "high", maxTokens: 32000 }),
+      ...baseParams({ effort: "medium", maxTokens: 24000, system: systemCours(fiche) }),
       messages: [
         {
           role: "user",
-          content: `${coursMessage(fiche)}\n\nPrépare un sujet d'entraînement de type « ${TYPES_SUJET[type]} » sur ce cours, réaliste et adapté au niveau de l'élève, avec des exercices variés (questions de cours, application, réflexion). Fournis aussi un corrigé détaillé et un barème.`,
+          content: `Prépare un sujet d'entraînement de type « ${TYPES_SUJET[type]} » sur le cours, réaliste et adapté au niveau de l'élève, avec des exercices variés (questions de cours, application, réflexion) et un barème. Corrigé : réponses attendues et méthode, sans paraphraser l'énoncé.`,
         },
       ],
     },
@@ -235,11 +256,11 @@ async function genererSujetClaude(fiche, type, onProgress) {
 async function corrigerCopieClaude(fiche, sujet, reponse, onProgress) {
   return run(
     {
-      ...baseParams({ effort: "high", maxTokens: 16000 }),
+      ...baseParams({ effort: "medium", maxTokens: 12000, system: systemCours(fiche) }),
       messages: [
         {
           role: "user",
-          content: `${coursMessage(fiche)}\n\n<sujet>\n${sujet.sujet}\n</sujet>\n\n<corrige_officiel>\n${sujet.corrige}\n</corrige_officiel>\n\n<copie_eleve>\n${reponse}\n</copie_eleve>\n\nCorrige la copie comme un professeur bienveillant : donne une note sur 20, ce qui est réussi, ce qui manque ou est faux (avec la bonne réponse), puis 3 conseils concrets pour progresser. Réponds en Markdown.`,
+          content: `<sujet>\n${sujet.sujet}\n</sujet>\n\n<corrige>\n${sujet.corrige}\n</corrige>\n\n<copie_eleve>\n${reponse}\n</copie_eleve>\n\nCorrige la copie en professeur bienveillant, en Markdown et en 25 lignes au plus : note sur 20, ce qui est réussi, ce qui manque ou est faux (avec la bonne réponse), puis 3 conseils concrets.`,
         },
       ],
     },
@@ -250,11 +271,11 @@ async function corrigerCopieClaude(fiche, sujet, reponse, onProgress) {
 async function plusDeFlashcardsClaude(fiche, existantes, onProgress) {
   const data = await runJSON(
     {
-      ...baseParams({ effort: "low", maxTokens: 16000 }),
+      ...baseParams({ effort: "low", maxTokens: 8000, system: systemCours(fiche) }),
       messages: [
         {
           role: "user",
-          content: `${coursMessage(fiche)}\n\nCrée 10 nouvelles flashcards sur ce cours, différentes de celles-ci :\n${existantes.map((c) => "- " + c.recto).join("\n")}`,
+          content: `Crée 10 nouvelles flashcards sur le cours, sur des notions différentes de celles-ci :\n${existantes.map((c) => "- " + court(c.recto, 60)).join("\n")}\n\n${REGLES_FLASHCARDS}`,
         },
       ],
     },
@@ -266,19 +287,19 @@ async function plusDeFlashcardsClaude(fiche, existantes, onProgress) {
 
 /** history : [{ role: "user" | "assistant", content: string }] */
 async function discuterClaude(fiche, history, onProgress) {
-  const messages = [
-    {
-      role: "user",
-      content: `${coursMessage(fiche)}\n\nJe vais te poser des questions sur ce cours. Explique simplement, avec des exemples concrets, et vérifie que j'ai compris en me posant parfois une petite question. Réponses courtes (10 lignes max) sauf si je demande plus.`,
-    },
-    { role: "assistant", content: "D'accord ! Pose-moi ta question sur ce cours." },
-    ...history,
-  ];
-  return run({ ...baseParams({ effort: "low", maxTokens: 8000 }), messages }, onProgress);
+  const system = systemCours(fiche);
+  system.push({
+    type: "text",
+    text: "Tu réponds aux questions de l'élève sur ce cours : explications simples, exemples concrets, et parfois une petite question pour vérifier qu'il a compris. 8 lignes au plus, sauf s'il demande plus.",
+  });
+  // Les 10 derniers messages suffisent : moins de texte renvoyé à chaque question.
+  const messages = history.slice(-10);
+  while (messages.length && messages[0].role !== "user") messages.shift();
+  return run({ ...baseParams({ effort: "low", maxTokens: 4000, system }), messages }, onProgress);
 }
 
 async function testerCleClaude() {
-  return run({ ...baseParams({ effort: "low", maxTokens: 2000 }), messages: [{ role: "user", content: "Réponds juste : OK" }] });
+  return run({ ...baseParams({ effort: "low", maxTokens: 1000, system: "Réponds en un mot." }), messages: [{ role: "user", content: "OK ?" }] });
 }
 
 // ---------- Aiguillage : mode démo (réponses préparées) ou vrai Claude ----------

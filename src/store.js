@@ -79,3 +79,17 @@ export function enregistrerActivite(type) {
   if (type === "qcm") s.qcmFaits += 1;
   write(KEY_STATS, s);
 }
+
+// ---------- Consommation de tokens (transparence éco-conception) ----------
+const KEY_CONSO = "revizz.conso";
+export const getConso = () => read(KEY_CONSO, { appels: 0, entree: 0, cache: 0, sortie: 0 });
+export function enregistrerConso(usage) {
+  if (!usage) return;
+  const c = getConso();
+  c.appels += 1;
+  c.entree += (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+  c.cache += usage.cache_read_input_tokens || 0;
+  c.sortie += usage.output_tokens || 0;
+  write(KEY_CONSO, c);
+}
+export const resetConso = () => write(KEY_CONSO, { appels: 0, entree: 0, cache: 0, sortie: 0 });

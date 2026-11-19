@@ -70,18 +70,18 @@ En 1799, le général **Napoléon Bonaparte** prend le pouvoir par un coup d'Ét
   ],
   astuce_memo: "« 89, la Bastille tombe ; 91, le roi accepte la Constitution ; 92, on passe à la République. » Les années vont de 2 en 2 : 89 → 91 → 92 (presque !).",
   flashcards: [
-    { recto: "Date de l'ouverture des États généraux ?", verso: "5 mai 1789" },
+    { recto: "À quelle date s'ouvrent les États généraux convoqués par Louis XVI ?", verso: "Le 5 mai 1789, à Versailles." },
     { recto: "Qu'est-ce que le serment du Jeu de paume ?", verso: "Le 20 juin 1789, les députés du tiers état jurent de ne pas se séparer avant d'avoir donné une Constitution à la France." },
-    { recto: "Date de la prise de la Bastille ?", verso: "14 juillet 1789" },
+    { recto: "À quelle date le peuple de Paris prend-il la Bastille ?", verso: "Le 14 juillet 1789." },
     { recto: "Que se passe-t-il la nuit du 4 août 1789 ?", verso: "L'abolition des privilèges." },
     { recto: "Que signifie DDHC et quand est-elle votée ?", verso: "Déclaration des droits de l'homme et du citoyen, le 26 août 1789." },
     { recto: "Quels sont les trois ordres de la société ?", verso: "Le clergé, la noblesse et le tiers état." },
     { recto: "Quel régime crée la Constitution de 1791 ?", verso: "Une monarchie constitutionnelle." },
-    { recto: "Quand la royauté est-elle abolie ?", verso: "Le 21 septembre 1792 : début de la Ire République." },
-    { recto: "Date de l'exécution de Louis XVI ?", verso: "21 janvier 1793" },
+    { recto: "À quelle date la royauté est-elle abolie en France ?", verso: "Le 21 septembre 1792 : début de la Ire République." },
+    { recto: "À quelle date Louis XVI est-il guillotiné ?", verso: "Le 21 janvier 1793." },
     { recto: "Qu'est-ce que la Terreur ?", verso: "Période de 1793 à 1794 où le gouvernement révolutionnaire (Robespierre) fait arrêter et exécuter les opposants." },
     { recto: "Qui prend le pouvoir en 1799 et comment ?", verso: "Napoléon Bonaparte, par le coup d'État du 18 brumaire." },
-    { recto: "Définition de la souveraineté nationale ?", verso: "Le pouvoir appartient à la nation (aux citoyens) et non plus au roi." },
+    { recto: "Que signifie le principe de souveraineté nationale affirmé en 1789 ?", verso: "Le pouvoir appartient à la nation (aux citoyens) et non plus au roi." },
     { recto: "Que dit l'article 1 de la DDHC ?", verso: "« Les hommes naissent et demeurent libres et égaux en droits. »" },
     { recto: "Pourquoi la Bastille est-elle un symbole ?", verso: "C'était une prison royale, symbole du pouvoir absolu du roi." },
   ],
@@ -204,13 +204,13 @@ Si BC² ≠ AB² + AC² (BC étant le plus grand côté), alors le triangle **n'
     { recto: "Qu'est-ce que l'hypoténuse ?", verso: "Le côté opposé à l'angle droit, le plus grand côté du triangle rectangle." },
     { recto: "Énoncé du théorème de Pythagore (ABC rectangle en A) ?", verso: "BC² = AB² + AC²" },
     { recto: "ABC rectangle en A, AB = 3, AC = 4. BC = ?", verso: "BC² = 9 + 16 = 25, donc BC = 5." },
-    { recto: "À quoi sert la réciproque ?", verso: "À prouver qu'un triangle est rectangle." },
-    { recto: "Comment calculer un petit côté ?", verso: "On soustrait : AB² = BC² − AC²." },
-    { recto: "√49 = ?", verso: "7" },
+    { recto: "À quoi sert la réciproque du théorème de Pythagore ?", verso: "À prouver qu'un triangle est rectangle." },
+    { recto: "ABC est rectangle en A : comment calculer le côté AB si l'on connaît BC et AC ?", verso: "On soustrait : AB² = BC² − AC², puis AB = √(BC² − AC²)." },
+    { recto: "Quelle est la racine carrée de 49 ?", verso: "√49 = 7, car 7² = 49." },
     { recto: "Un triangle de côtés 6, 8 et 10 est-il rectangle ?", verso: "Oui : 10² = 100 et 6² + 8² = 36 + 64 = 100." },
     { recto: "Un triangle de côtés 4, 5 et 6 est-il rectangle ?", verso: "Non : 6² = 36 alors que 4² + 5² = 41." },
-    { recto: "Que sert à prouver la contraposée ?", verso: "Qu'un triangle n'est pas rectangle." },
-    { recto: "Quel côté met-on seul dans l'égalité ?", verso: "Toujours l'hypoténuse (le plus grand côté)." },
+    { recto: "À quoi sert la contraposée du théorème de Pythagore ?", verso: "À prouver qu'un triangle n'est pas rectangle." },
+    { recto: "Dans l'égalité de Pythagore, quel côté est seul d'un côté du signe = ?", verso: "L'hypoténuse, le plus grand côté : BC² = AB² + AC²." },
   ],
 };
 
@@ -330,7 +330,7 @@ ${manquants.slice(0, 5).map((m) => `- Il manque **${m}** : regarde le corrigé.`
 export async function plusDeFlashcards(fiche, existantes, onProgress) {
   await simuler("x".repeat(1500), onProgress, 1500);
   const supp = fiche.demoKey === "maths"
-    ? [{ recto: "Triplet de Pythagore commençant par 5 ?", verso: "5-12-13" }, { recto: "√144 = ?", verso: "12" }]
+    ? [{ recto: "Quel triplet de Pythagore commence par 5 ?", verso: "5-12-13, car 5² + 12² = 25 + 144 = 169 = 13²." }, { recto: "Quelle est la racine carrée de 144 ?", verso: "√144 = 12, car 12² = 144." }]
     : [{ recto: "Qui est Robespierre ?", verso: "Un révolutionnaire, principal dirigeant de la Terreur (1793-1794)." }, { recto: "Qu'est-ce que la fuite à Varennes ?", verso: "En juin 1791, Louis XVI tente de fuir la France ; il est arrêté à Varennes." }];
   return supp.filter((c) => !existantes.some((e) => e.recto === c.recto));
 }

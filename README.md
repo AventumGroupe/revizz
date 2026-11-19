@@ -44,7 +44,17 @@ Le modèle par défaut est **Claude Opus 5.5**, le plus fiable pour lire l'écri
 
 Ce sont des estimations. Le vrai coût s'affiche dans la console (*Usage*).
 
-Le modèle se change dans les Réglages. La requête place le début du cours en cache, ce qui rend les questions suivantes sur la même fiche moins chères.
+Le modèle se change dans les Réglages.
+
+### Éco-conception
+
+- **Photos réduites à 1280 px** : environ 1 600 tokens par page au lieu de 2 400, l'écriture reste lisible.
+- **Cours mis en cache** : le texte du cours est placé dans une partie fixe de la requête. Les QCM, sujets, cartes et questions au prof le relisent depuis le cache pendant 5 minutes, à 10 % du prix.
+- **Pas de doublon** : seule la transcription sert de référence, la fiche résumé n'est plus renvoyée.
+- **Réflexion dosée** : effort faible pour les QCM, les cartes et le prof ; moyen pour la lecture des photos, les sujets et les corrections.
+- **Réponses courtes** : moins de cartes, mais plus précises, corrections limitées à 25 lignes, prof à 8 lignes, 10 derniers messages seulement.
+- **Zéro appel quand c'est possible** : refaire le dernier QCM (questions et propositions mélangées), réviser les cartes ou relire un sujet ne consomme rien.
+- **Compteur** dans les Réglages : demandes, tokens lus et écrits, part relue depuis le cache.
 
 ## Développement
 

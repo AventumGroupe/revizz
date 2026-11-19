@@ -24,13 +24,13 @@ const shuffle = (a) => {
   return b;
 };
 const COULEURS = {
-  math: "#6c5ce7", fran: "#e17055", hist: "#d4a017", géo: "#d4a017", svt: "#00b894", phys: "#0984e3",
-  chim: "#0984e3", angl: "#e84393", espa: "#fd79a8", allem: "#fd79a8", philo: "#636e72", éco: "#00cec9", ses: "#00cec9", tech: "#74b9ff",
+  math: "#0f9d8a", fran: "#e17055", hist: "#d4a017", géo: "#d4a017", svt: "#2f9e44", phys: "#1c7ed6",
+  chim: "#1c7ed6", angl: "#e84393", espa: "#fd79a8", allem: "#fd79a8", philo: "#636e72", éco: "#00cec9", ses: "#00cec9", tech: "#74b9ff",
 };
 const couleur = (matiere = "") => {
   const m = matiere.toLowerCase();
   for (const k in COULEURS) if (m.includes(k)) return COULEURS[k];
-  return "#a29bfe";
+  return "#64748b";
 };
 // Fenêtre de confirmation intégrée (les fenêtres du navigateur ne marchent pas partout).
 function confirmer(message, libelleOk = "Supprimer") {
@@ -204,7 +204,7 @@ async function prendrePhoto() {
       resultType: CameraResultType.DataUrl,
       source: CameraSource.Camera,
       quality: 85,
-      width: 2000,
+      width: 1280,
       correctOrientation: true,
     });
     pages.push(await imagePage(photo.dataUrl));
@@ -235,18 +235,18 @@ const lireDataUrl = (file) =>
     r.onerror = rej;
     r.readAsDataURL(file);
   });
-// Réduit la photo (1600 px max) : plus rapide à envoyer et moins cher, sans perte de lisibilité.
+// Réduit la photo (1280 px max) : environ 1 600 tokens par page au lieu de 2 400, l'écriture reste lisible.
 function imagePage(dataUrl) {
   return new Promise((res, rej) => {
     const img = new Image();
     img.onload = () => {
-      const max = 1600;
+      const max = 1280;
       const k = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement("canvas");
       c.width = Math.round(img.width * k);
       c.height = Math.round(img.height * k);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      const out = c.toDataURL("image/jpeg", 0.85);
+      const out = c.toDataURL("image/jpeg", 0.8);
       res({ kind: "image", mediaType: "image/jpeg", data: out.split(",")[1], preview: out });
     };
     img.onerror = () => rej(new Error("Image illisible"));
@@ -501,6 +501,7 @@ function tabQCM(f) {
         .join("")}</div>
       <div class="seg">${[5, 10, 20].map((n) => `<button class="${qcmNombre === n ? "on" : ""}" data-nombre="${n}">${n} questions</button>`).join("")}</div>
       <button class="btn primary big-btn" id="gen-qcm">✨ Générer le QCM</button>
+      ${f.dernierQCM?.length ? `<button class="btn secondary big-btn" id="replay-qcm">🔁 Refaire le dernier QCM (${f.dernierQCM.length} questions, sans appel à Claude)</button>` : ""}
       <div id="progress"></div>
     </div>
     ${
@@ -554,7 +555,8 @@ function bindQCM(f) {
       const p = progressUI($("progress"), "Claude prépare tes questions…");
       try {
         const questions = await ai.genererQCM(f, qcmNiveau, qcmNombre, f.questionsVues || [], p.update);
-        f.questionsVues = [...(f.questionsVues || []), ...questions.map((q) => q.question)].slice(-80);
+        f.questionsVues = [...(f.questionsVues || []), ...questions.map((q) => q.question)].slice(-40);
+        f.dernierQCM = questions; // gardé pour le refaire hors ligne
         store.saveFiche(f);
         qcm = { ficheId: f.id, questions, i: 0, choisi: null, score: 0, niveau: qcmNiveau, erreurs: [] };
         render();
@@ -564,6 +566,16 @@ function bindQCM(f) {
       } finally {
         p.stop();
       }
+    };
+  if ($("replay-qcm"))
+    $("replay-qcm").onclick = () => {
+      const questions = shuffle(f.dernierQCM).map((q) => {
+        // Mélange aussi l'ordre des propositions.
+        const ordre = shuffle(q.choix.map((_, i) => i));
+        return { ...q, choix: ordre.map((i) => q.choix[i]), bonne_reponse: ordre.indexOf(q.bonne_reponse) };
+      });
+      qcm = { ficheId: f.id, questions, i: 0, choisi: null, score: 0, niveau: "rejoué", erreurs: [] };
+      render();
     };
   document.querySelectorAll("[data-choix]").forEach(
     (b) =>
@@ -762,10 +774,34 @@ function settings() {
   ${DEMO_ONLY ? "" : `<button class="btn ghost big-btn" id="test">Tester la clé</button>`}
   ${s.demo && !DEMO_ONLY ? `<button class="btn ghost big-btn" id="quit-demo">Quitter la démo</button>` : ""}
   <div id="progress"></div>
+  ${consoHTML()}
   <p class="hint center">Révizz · tes fiches restent sur ce téléphone.</p>`;
+}
+const nf = (n) => n.toLocaleString("fr-FR");
+function consoHTML() {
+  const c = store.getConso();
+  if (!c.appels) return "";
+  const total = c.entree + c.cache + c.sortie;
+  const partCache = total ? Math.round((c.cache / (c.entree + c.cache || 1)) * 100) : 0;
+  return `<div class="card conso">
+    <h3>🌱 Consommation</h3>
+    <div class="conso-grid">
+      <div><b>${nf(c.appels)}</b><span>demandes à Claude</span></div>
+      <div><b>${nf(c.entree + c.cache)}</b><span>tokens lus</span></div>
+      <div><b>${nf(c.sortie)}</b><span>tokens écrits</span></div>
+      <div><b>${partCache} %</b><span>relus depuis le cache</span></div>
+    </div>
+    <p class="hint">Les tokens écrits sont les plus coûteux en énergie. Refaire un QCM déjà généré ou réviser les cartes ne consomme rien.</p>
+    <button class="btn ghost" id="reset-conso">Remettre le compteur à zéro</button>
+  </div>`;
 }
 afterRender.settings = () => {
   const $ = (id) => document.getElementById(id);
+  if ($("reset-conso"))
+    $("reset-conso").onclick = () => {
+      store.resetConso();
+      render();
+    };
   const save = () => {
     const reglages = { prenom: $("prenom").value.trim(), classe: $("classe").value };
     if (!DEMO_ONLY) Object.assign(reglages, { apiKey: $("apikey").value.trim(), model: $("model").value });
