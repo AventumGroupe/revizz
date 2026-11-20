@@ -1272,7 +1272,8 @@ function tabSujet(f) {
     .join("")}
   ${
     corrige
-      ? `<button class="btn secondary big-btn" id="refaire-sujet">${ic("refaire", 18)} Refaire ce sujet</button>`
+      ? `<button class="btn secondary big-btn" id="recorriger">${ic("actualiser", 18)} Faire relire ma copie</button>
+         <button class="btn ghost big-btn" id="refaire-sujet">${ic("refaire", 18)} Refaire ce sujet</button>`
       : `<p class="hint center" id="compteur-reps">${remplies}/${total} réponses remplies${remplies < total ? " : réponds à toutes les questions pour voir la correction (écris « je ne sais pas » si besoin)" : ""}</p>
          <button class="btn primary big-btn" id="corriger" ${remplies < total ? "disabled" : ""}>${ic("copie", 18)} Rendre ma copie</button>`
   }
@@ -1326,6 +1327,26 @@ function bindSujet(f) {
       delete s.correction;
       store.saveFiche(f);
       render();
+    };
+  // Nouvelle correction des mêmes réponses (par exemple après une correction trop sévère sur les mots).
+  if ($("recorriger"))
+    $("recorriger").onclick = async (e) => {
+      e.target.disabled = true;
+      const avant = noteDuSujet(s).sur20;
+      const p = progressUI($("progress"), "Le prof relit ta copie…");
+      try {
+        s.correction = await ai.corrigerCopie(f, s, (s.reponses || []).slice(0, total), p.update);
+        store.saveFiche(f);
+        const apres = noteDuSujet(s).sur20;
+        render();
+        window.scrollTo(0, 0);
+        toast(apres === avant ? `Note confirmée : ${fmt(apres)}/20` : `Nouvelle note : ${fmt(apres)}/20 (avant ${fmt(avant)})`);
+      } catch (err) {
+        $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+        e.target.disabled = false;
+      } finally {
+        p.stop();
+      }
     };
   if ($("corriger"))
     $("corriger").onclick = async (e) => {

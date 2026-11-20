@@ -223,6 +223,9 @@ const SUJET_SCHEMA = obj({
 
 // Méthode de correction, d'après les pratiques d'évaluation de l'Éducation nationale.
 const METHODE_CORRECTION = `Méthode de correction :
+- Corrige comme un professeur bienveillant : tu notes la compréhension, pas les mots. La réponse attendue est un modèle, pas une formulation imposée. Une idée juste dite avec d'autres mots que le cours, un synonyme, une périphrase, un exemple différent ou un raisonnement mené autrement mais correct rapporte TOUS les points du critère. Ne retire jamais de points parce qu'un terme du cours manque si l'idée est là.
+- Le vocabulaire précis ne compte que si la question le demande expressément (« définis… », « nomme… », « quel est le terme… ») ou si le critère du barème porte explicitement sur une notion ; même alors, une idée juste mal nommée garde au moins la moitié des points du critère.
+- Dans le doute entre deux notes, choisis la plus favorable à l'élève.
 - Applique le barème de chaque question critère par critère ; accorde des points partiels (par demi-points).
 - Mathématiques et sciences : valorise la démarche. Un raisonnement juste avec une erreur de calcul garde l'essentiel des points ; une trace de recherche pertinente, même incomplète, rapporte des points ; un résultat juste sans la justification demandée n'obtient pas tous les points. Repère les compétences (chercher, modéliser, représenter, raisonner, calculer, communiquer).
 - Réponses rédigées (histoire-géographie, français, SES, langues, philosophie) : évalue par capacités (connaissances, compréhension et analyse, argumentation et organisation, maîtrise de la langue) avec 4 niveaux de maîtrise : très insuffisant (0 à 25 % des points), insuffisant (25 à 50 %), satisfaisant (50 à 75 %), très satisfaisant (75 à 100 %).
@@ -236,7 +239,7 @@ const CORRECTION_SCHEMA = obj({
       numero: { type: "integer", description: "Numéro de la question (1, 2, 3… dans l'ordre du sujet)" },
       points_obtenus: { type: "number", description: "Points obtenus, par demi-points, sans dépasser le barème" },
       niveau: { type: "string", enum: ["très insuffisant", "insuffisant", "satisfaisant", "très satisfaisant"] },
-      commentaire: str("Ce qui est réussi et ce qui manque, 1 à 3 phrases"),
+      commentaire: str("Ce qui est réussi et ce qui manque, 1 à 3 phrases. Si l'idée est juste avec d'autres mots, dis-le et donne le terme du cours comme conseil, sans retirer de points"),
     }),
     "Une entrée par question"
   ),
@@ -585,7 +588,7 @@ async function genererSujetClaude(fiche, type, onProgress) {
           role: "user",
           content: `Prépare ${FORMAT_SUJET[type] || FORMAT_SUJET.controle}, sur le cours, réaliste et adapté au niveau de l'élève.
 - Chaque question ne demande qu'UNE seule chose : l'élève y répond juste en dessous. Découpe les questions doubles.
-- Total des points : 20. Barème détaillé pour chaque question (critères et points), comme un professeur.
+- Total des points : 20. Barème détaillé pour chaque question (critères et points), comme un professeur. Chaque critère décrit une idée ou un savoir-faire à montrer, pas des mots exacts à recopier ; ne réserve un critère au vocabulaire que si la question demande une définition ou un terme.
 - Réponse attendue complète pour chaque question (elle ne sera montrée qu'après la copie rendue).
 - Utilise les types d'exercices officiels de la matière, avec leur nom et leur méthode. Un exercice long (réponse à une question problématisée, commentaire, raisonnement sur dossier, mobiliser ses connaissances…) tient en UNE question notée sur beaucoup de points, avec un barème qui reprend les critères de la méthode (introduction, organisation, connaissances, exemples, rédaction…).
 ${referentielPourSujet(fiche.matiere) || APPLICATION_PAR_MATIERE}`,

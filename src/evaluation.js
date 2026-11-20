@@ -12,7 +12,7 @@ const R = {
         methode:
           "Introduction : définir les mots du sujet, situer dans le temps et l'espace, poser la problématique, annoncer le plan. Développement : 2 ou 3 parties, chacune avec une idée, expliquée et illustrée par des exemples précis (dates, lieux, acteurs, chiffres). Conclusion : répondre à la problématique.",
         criteres:
-          "comprendre le sujet et la problématique ; organiser la réponse (introduction, parties, conclusion) ; mobiliser des connaissances et des repères exacts à bon escient ; employer les notions et le vocabulaire de la discipline ; rédiger clairement",
+          "comprendre le sujet et la problématique ; organiser la réponse (introduction, parties, conclusion) ; mobiliser des connaissances et des repères exacts à bon escient ; employer les notions de la discipline (l'idée compte plus que le mot exact) ; rédiger clairement",
       },
       {
         nom: "Analyse de document(s)",
