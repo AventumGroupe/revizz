@@ -185,7 +185,7 @@ const analyseSchema = () => obj({
 const QCM_SCHEMA = obj({
   questions: arr(
     obj({
-      question: str("Énoncé précis et autonome"),
+      question: str("UNE seule question, précise et autonome : pas de « et » qui en demande deux, pas de sous-question"),
       choix: arr(str("Proposition courte"), "Exactement 4 propositions"),
       bonne_reponse: { type: "integer", description: "Indice (0 à 3) de la bonne proposition" },
       explication: str("Pourquoi c'est la bonne réponse, en 1 ou 2 phrases"),
@@ -196,10 +196,52 @@ const QCM_SCHEMA = obj({
 
 const SUJET_SCHEMA = obj({
   titre: str("Titre du sujet"),
-  duree: str("Durée conseillée, ex : 30 min"),
-  sujet: str("Énoncé complet en Markdown, avec les points de chaque exercice"),
-  corrige: str("Corrigé en Markdown : réponses attendues, méthode, erreurs à éviter"),
+  duree: str("Durée conseillée, ex : 50 min"),
+  consignes: str("Consignes générales courtes (calculatrice, rédaction…), vide si aucune"),
+  exercices: arr(
+    obj({
+      titre: str("Titre de l'exercice"),
+      document: str("Document à étudier en Markdown (texte, données, description d'une carte ou d'un graphique), vide s'il n'y en a pas"),
+      questions: arr(
+        obj({
+          enonce: str("UNE seule question ou tâche, claire, à laquelle l'élève répond juste en dessous"),
+          points: { type: "number", description: "Points de la question (le total du sujet fait 20)" },
+          competence: str("Compétence évaluée, ex : Connaître, Calculer, Raisonner, Analyser un document, Argumenter"),
+          reponse_attendue: str("Réponse attendue en Markdown, complète"),
+          bareme: arr(obj({ critere: str("Ce qui rapporte des points"), points: { type: "number" } }), "Barème détaillé de la question, critère par critère"),
+          erreurs_frequentes: str("Erreur fréquente à éviter, une phrase"),
+        }),
+        "Questions de l'exercice"
+      ),
+    }),
+    "2 à 4 exercices"
+  ),
 });
+
+// Méthode de correction, d'après les pratiques d'évaluation de l'Éducation nationale.
+const METHODE_CORRECTION = `Méthode de correction :
+- Applique le barème de chaque question critère par critère ; accorde des points partiels (par demi-points).
+- Mathématiques et sciences : valorise la démarche. Un raisonnement juste avec une erreur de calcul garde l'essentiel des points ; une trace de recherche pertinente, même incomplète, rapporte des points ; un résultat juste sans la justification demandée n'obtient pas tous les points. Repère les compétences (chercher, modéliser, représenter, raisonner, calculer, communiquer).
+- Réponses rédigées (histoire-géographie, français, SES, langues, philosophie) : évalue par capacités (connaissances, compréhension et analyse, argumentation et organisation, maîtrise de la langue) avec 4 niveaux de maîtrise : très insuffisant (0 à 25 % des points), insuffisant (25 à 50 %), satisfaisant (50 à 75 %), très satisfaisant (75 à 100 %).
+- La langue compte mais ne fait pas perdre plus de 10 % des points d'une question, sauf si elle empêche de comprendre.
+- Une réponse vide, « je ne sais pas » ou hors sujet vaut 0. Ne prête pas à l'élève ce qu'il n'a pas écrit.
+- Commentaires bienveillants et précis : ce qui est réussi, ce qui manque, la bonne réponse en une phrase.`;
+
+const CORRECTION_SCHEMA = obj({
+  questions: arr(
+    obj({
+      numero: { type: "integer", description: "Numéro de la question (1, 2, 3… dans l'ordre du sujet)" },
+      points_obtenus: { type: "number", description: "Points obtenus, par demi-points, sans dépasser le barème" },
+      niveau: { type: "string", enum: ["très insuffisant", "insuffisant", "satisfaisant", "très satisfaisant"] },
+      commentaire: str("Ce qui est réussi et ce qui manque, 1 à 3 phrases"),
+    }),
+    "Une entrée par question"
+  ),
+  appreciation: str("Appréciation générale, 2 phrases, comme sur une copie"),
+  points_forts: arr(str("Point fort"), "1 à 3 points forts"),
+  a_travailler: arr(str("Point à travailler, concret"), "1 à 3 points à travailler"),
+});
+
 
 const FLASHCARDS_SCHEMA = obj({ flashcards: arr(FLASHCARD, "Nouvelles flashcards") });
 
@@ -408,7 +450,7 @@ async function genererQCMClaude(fiche, niveau, nombre, dejaPosees, onProgress) {
       messages: [
         {
           role: "user",
-          content: `Crée un QCM de ${nombre} questions ${NIVEAUX[niveau]} sur le cours. Chaque question est précise et autonome (elle nomme le sujet), avec exactement 4 propositions plausibles et une seule bonne réponse. Varie la position de la bonne réponse.${deja}`,
+          content: `Crée un QCM de ${nombre} questions ${NIVEAUX[niveau]} sur le cours. Chaque question est précise et autonome (elle nomme le sujet) et ne demande qu'UNE seule chose : jamais deux questions en une (pas de « Quand et pourquoi… ? », pas de « Qui… et que… ? »). Exactement 4 propositions plausibles et une seule bonne réponse. Varie la position de la bonne réponse.${deja}`,
         },
       ],
     },
@@ -524,6 +566,13 @@ export const TYPES_SUJET = {
   oral: "Préparation à l'oral",
 };
 
+const FORMAT_SUJET = {
+  controle: "un contrôle de 50 minutes : 3 exercices, 8 à 10 questions, des questions de cours à la réflexion",
+  express: "une interro express de 10 minutes : 1 exercice, 3 à 4 questions courtes",
+  brevet: "un sujet type brevet : 2 ou 3 exercices progressifs, avec documents si la matière s'y prête",
+  bac: "un sujet type bac (format des évaluations communes) : 2 ou 3 exercices, analyse de document ou problème, réponses argumentées",
+  oral: "une préparation à l'oral : 4 à 6 questions de jury, l'élève écrit les idées qu'il dirait",
+};
 async function genererSujetClaude(fiche, type, onProgress) {
   return runJSON(
     {
@@ -531,7 +580,11 @@ async function genererSujetClaude(fiche, type, onProgress) {
       messages: [
         {
           role: "user",
-          content: `Prépare un sujet d'entraînement de type « ${TYPES_SUJET[type]} » sur le cours, réaliste et adapté au niveau de l'élève, avec des exercices variés (questions de cours, application, réflexion) et un barème. Corrigé : réponses attendues et méthode, sans paraphraser l'énoncé.`,
+          content: `Prépare ${FORMAT_SUJET[type] || FORMAT_SUJET.controle}, sur le cours, réaliste et adapté au niveau de l'élève.
+- Chaque question ne demande qu'UNE seule chose : l'élève y répond juste en dessous. Découpe les questions doubles.
+- Total des points : 20. Barème détaillé pour chaque question (critères et points), comme un professeur.
+- Réponse attendue complète pour chaque question (elle ne sera montrée qu'après la copie rendue).
+${APPLICATION_PAR_MATIERE}`,
         },
       ],
     },
@@ -540,17 +593,27 @@ async function genererSujetClaude(fiche, type, onProgress) {
   );
 }
 
-async function corrigerCopieClaude(fiche, sujet, reponse, onProgress) {
-  return run(
+/** reponses : tableau des réponses de l'élève, dans l'ordre des questions du sujet. */
+async function corrigerCopieClaude(fiche, sujet, reponses, onProgress) {
+  let n = 0;
+  const copie = sujet.exercices
+    .map(
+      (ex, i) =>
+        `## Exercice ${i + 1} : ${ex.titre}\n${ex.document ? `Document :\n${ex.document}\n` : ""}` +
+        ex.questions
+          .map((q) => {
+            n++;
+            return `### Question ${n} (${q.points} pts) : ${q.enonce}\nRéponse attendue : ${q.reponse_attendue}\nBarème : ${q.bareme.map((b) => `${b.critere} (${b.points})`).join(" ; ")}\n<reponse_eleve>\n${reponses[n - 1] || ""}\n</reponse_eleve>`;
+          })
+          .join("\n\n")
+    )
+    .join("\n\n");
+  return runJSON(
     {
-      ...baseParams({ effort: "medium", maxTokens: 12000, system: systemCours(fiche) }),
-      messages: [
-        {
-          role: "user",
-          content: `<sujet>\n${sujet.sujet}\n</sujet>\n\n<corrige>\n${sujet.corrige}\n</corrige>\n\n<copie_eleve>\n${reponse}\n</copie_eleve>\n\nCorrige la copie en professeur bienveillant, en Markdown et en 25 lignes au plus : note sur 20, ce qui est réussi, ce qui manque ou est faux (avec la bonne réponse), puis 3 conseils concrets.`,
-        },
-      ],
+      ...baseParams({ effort: "medium", maxTokens: 16000, system: systemCours(fiche) }),
+      messages: [{ role: "user", content: `${copie}\n\nCorrige cette copie question par question.\n${METHODE_CORRECTION}` }],
     },
+    CORRECTION_SCHEMA,
     onProgress
   );
 }

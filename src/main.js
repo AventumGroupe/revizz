@@ -1171,7 +1171,16 @@ function bindQCM(f) {
 // --- Sujet d'entraînement
 let sujetType = "controle";
 let sujetOuvert = null; // index dans f.sujets
-let corrigeVisible = false;
+let corrigeVisible = false; // anciens sujets (format texte)
+const questionsDu = (s) => (s.exercices || []).flatMap((e) => e.questions || []);
+// Note sur 20 à partir des points obtenus (le barème est respecté question par question).
+function noteDuSujet(s) {
+  const qs = questionsDu(s);
+  const total = qs.reduce((n, q) => n + (Number(q.points) || 0), 0) || 20;
+  const obtenu = qs.reduce((n, q, i) => n + Math.min(Number(q.points) || 0, Math.max(0, Number(s.correction?.questions?.find((r) => r.numero === i + 1)?.points_obtenus) || 0)), 0);
+  return { obtenu, total, sur20: Math.round((obtenu / total) * 20 * 2) / 2 };
+}
+const fmt = (n) => String(n).replace(".", ",");
 function tabSujet(f) {
   const s = sujetOuvert !== null ? f.sujets[sujetOuvert] : null;
   if (!s) {
@@ -1181,6 +1190,7 @@ function tabSujet(f) {
       <div class="seg wrap">${Object.entries(ai.TYPES_SUJET)
         .map(([k, l]) => `<button class="${sujetType === k ? "on" : ""}" data-stype="${k}">${l}</button>`)
         .join("")}</div>
+      <p class="hint">Une question à la fois, ta réponse juste en dessous. La correction et le barème apparaissent quand tu rends ta copie.</p>
       <button class="btn primary big-btn" id="gen-sujet">Générer le sujet</button>
       <div id="progress"></div>
     </div>
@@ -1189,22 +1199,83 @@ function tabSujet(f) {
         ? `<h3>Mes sujets</h3><div class="liste-lignes">${f.sujets
             .map(
               (x, i) =>
-                `<button class="ligne" data-sujet="${i}">${ic("sujet", 20, "t-ic")}<span class="ligne-txt"><b>${esc(x.titre)}</b><small>${esc(x.duree)}${x.note ? " · corrigée" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
+                `<button class="ligne" data-sujet="${i}">${ic("sujet", 20, "t-ic")}<span class="ligne-txt"><b>${esc(x.titre)}</b><small>${esc(x.duree)}${x.correction ? ` · ${fmt(noteDuSujet(x).sur20)}/20` : x.note ? " · corrigé" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
             )
             .join("")}</div>`
         : ""
     }`;
   }
+  // Ancien format (texte libre) : consultation seulement.
+  if (!s.exercices)
+    return `
+    <button class="btn ghost" id="sujet-back">${ic("retour", 18)} Mes sujets</button>
+    <div class="card md"><h2>${esc(s.titre)}</h2><p class="sub">${ic("heure", 15)} ${esc(s.duree)}</p>${md(s.sujet || "")}</div>
+    ${s.note ? `<div class="card md correction">${md(s.note)}</div>` : ""}
+    <p class="hint">Ce sujet date de l'ancienne version. Génère un nouveau sujet pour répondre question par question.</p>
+    <button class="btn secondary big-btn" id="toggle-corrige">${corrigeVisible ? "Cacher" : "Voir"} le corrigé</button>
+    ${corrigeVisible ? `<div class="card md">${md(s.corrige || "")}</div>` : ""}`;
+
+  const corrige = !!s.correction;
+  const reps = s.reponses || [];
+  const total = questionsDu(s).length;
+  const remplies = reps.filter((r) => r && r.trim()).length;
+  const note = corrige ? noteDuSujet(s) : null;
+  let n = 0;
   return `
   <button class="btn ghost" id="sujet-back">${ic("retour", 18)} Mes sujets</button>
-  <div class="card md"><h2>${esc(s.titre)}</h2><p class="sub">${ic("heure", 15)} ${esc(s.duree)}</p>${md(s.sujet)}</div>
-  <h3>Ma réponse</h3>
-  <textarea id="copie" rows="8" placeholder="Écris tes réponses ici (ou résume-les), puis demande la correction.">${esc(s.copie || "")}</textarea>
-  <button class="btn primary big-btn" id="corriger">${ic("copie", 18)} Corriger ma copie</button>
-  <div id="progress"></div>
-  ${s.note ? `<div class="card md correction">${md(s.note)}</div>` : ""}
-  <button class="btn secondary big-btn" id="toggle-corrige">${corrigeVisible ? "Cacher" : "Voir"} le corrigé</button>
-  ${corrigeVisible ? `<div class="card md">${md(s.corrige)}</div>` : ""}`;
+  <div class="card sujet-tete">
+    <h2>${esc(s.titre)}</h2>
+    <p class="sub">${ic("heure", 15)} ${esc(s.duree)} · noté sur 20</p>
+    ${s.consignes ? `<p class="consigne-generale">${esc(s.consignes)}</p>` : ""}
+  </div>
+  ${
+    corrige
+      ? `<div class="card bilan">
+          <div class="bilan-note"><b class="big-num">${fmt(note.sur20)}<small>/20</small></b><span>${fmt(note.obtenu)} point${note.obtenu > 1 ? "s" : ""} sur ${fmt(note.total)}</span></div>
+          <p>${esc(s.correction.appreciation)}</p>
+          ${s.correction.points_forts?.length ? `<h3>Points forts</h3><ul class="keys">${s.correction.points_forts.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+          ${s.correction.a_travailler?.length ? `<h3>À travailler</h3><ul class="keys">${s.correction.a_travailler.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+        </div>`
+      : ""
+  }
+  ${s.exercices
+    .map(
+      (ex, ie) => `<section class="exercice">
+      <h3 class="ex-titre">Exercice ${ie + 1} · ${esc(ex.titre)} <span>${fmt(ex.questions.reduce((t, q) => t + (Number(q.points) || 0), 0))} pts</span></h3>
+      ${ex.document ? `<div class="card md document">${md(ex.document)}</div>` : ""}
+      ${ex.questions
+        .map((q) => {
+          const i = n++;
+          const r = s.correction?.questions?.find((x) => x.numero === i + 1);
+          return `<div class="question-bloc">
+            <p class="q-enonce"><b>${i + 1}.</b> <span>${esc(q.enonce)}</span> <em>${fmt(q.points)} pt${q.points > 1 ? "s" : ""}</em></p>
+            <textarea data-rep="${i}" rows="3" placeholder="Ta réponse" ${corrige ? "readonly" : ""}>${esc(reps[i] || "")}</textarea>
+            ${
+              corrige
+                ? `<div class="corr ${r && r.points_obtenus >= q.points * 0.75 ? "corr-ok" : r && r.points_obtenus >= q.points * 0.5 ? "corr-moyen" : "corr-ko"}">
+                    <div class="corr-tete"><b>${fmt(Math.min(q.points, r?.points_obtenus ?? 0))} / ${fmt(q.points)}</b><span>${esc(r?.niveau || "")}</span></div>
+                    ${r?.commentaire ? `<p>${esc(r.commentaire)}</p>` : ""}
+                    <details><summary>Réponse attendue et barème</summary>
+                      <div class="md">${md(q.reponse_attendue)}</div>
+                      <ul class="bareme">${(q.bareme || []).map((b) => `<li><span>${esc(b.critere)}</span><b>${fmt(b.points)} pt${b.points > 1 ? "s" : ""}</b></li>`).join("")}</ul>
+                      ${q.erreurs_frequentes ? `<p class="hint">${ic("info", 14)} Erreur fréquente : ${esc(q.erreurs_frequentes)}</p>` : ""}
+                    </details>
+                  </div>`
+                : ""
+            }
+          </div>`;
+        })
+        .join("")}
+    </section>`
+    )
+    .join("")}
+  ${
+    corrige
+      ? `<button class="btn secondary big-btn" id="refaire-sujet">${ic("refaire", 18)} Refaire ce sujet</button>`
+      : `<p class="hint center" id="compteur-reps">${remplies}/${total} réponses remplies${remplies < total ? " : réponds à toutes les questions pour voir la correction (écris « je ne sais pas » si besoin)" : ""}</p>
+         <button class="btn primary big-btn" id="corriger" ${remplies < total ? "disabled" : ""}>${ic("copie", 18)} Rendre ma copie</button>`
+  }
+  <div id="progress"></div>`;
 }
 function bindSujet(f) {
   const $ = (id) => document.getElementById(id);
@@ -1215,14 +1286,13 @@ function bindSujet(f) {
   if ($("gen-sujet"))
     $("gen-sujet").onclick = async (e) => {
       e.target.disabled = true;
-      const p = progressUI($("progress"), "Claude rédige ton sujet et son corrigé…");
+      const p = progressUI($("progress"), "Claude rédige ton sujet et son barème…");
       try {
         const s = await ai.genererSujet(f, sujetType, p.update);
-        f.sujets.unshift({ ...s, type: sujetType, date: Date.now() });
+        f.sujets.unshift({ ...s, type: sujetType, date: Date.now(), reponses: [] });
         f.sujets = f.sujets.slice(0, 10);
         store.saveFiche(f);
         sujetOuvert = 0;
-        corrigeVisible = false;
         render();
       } catch (err) {
         $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
@@ -1233,20 +1303,41 @@ function bindSujet(f) {
     };
   if ($("sujet-back")) $("sujet-back").onclick = () => ((sujetOuvert = null), render());
   if ($("toggle-corrige")) $("toggle-corrige").onclick = () => ((corrigeVisible = !corrigeVisible), render());
-  if ($("copie")) {
-    const s = f.sujets[sujetOuvert];
-    $("copie").oninput = (e) => {
-      s.copie = e.target.value;
-      store.saveFiche(f);
-    };
-    $("corriger").onclick = async (e) => {
-      if (!s.copie?.trim()) return toast("Écris d'abord ta réponse");
-      e.target.disabled = true;
-      const p = progressUI($("progress"), "Le prof corrige ta copie…");
-      try {
-        s.note = await ai.corrigerCopie(f, s, s.copie, p.update);
+  const s = sujetOuvert !== null ? f.sujets[sujetOuvert] : null;
+  if (!s?.exercices) return;
+  const total = questionsDu(s).length;
+  // Les réponses sont gardées au fil de la frappe ; la correction ne s'ouvre que quand tout est rempli.
+  document.querySelectorAll("[data-rep]").forEach(
+    (t) =>
+      (t.oninput = () => {
+        s.reponses = s.reponses || [];
+        s.reponses[+t.dataset.rep] = t.value;
         store.saveFiche(f);
+        const remplies = s.reponses.filter((r) => r && r.trim()).length;
+        if ($("compteur-reps")) $("compteur-reps").textContent = `${remplies}/${total} réponses remplies${remplies < total ? " : réponds à toutes les questions pour voir la correction (écris « je ne sais pas » si besoin)" : ""}`;
+        if ($("corriger")) $("corriger").disabled = remplies < total;
+      })
+  );
+  if ($("refaire-sujet"))
+    $("refaire-sujet").onclick = async () => {
+      if (!(await confirmer("Effacer tes réponses et la correction pour refaire ce sujet ?", "Refaire"))) return;
+      s.reponses = [];
+      delete s.correction;
+      store.saveFiche(f);
+      render();
+    };
+  if ($("corriger"))
+    $("corriger").onclick = async (e) => {
+      const reps = (s.reponses || []).slice(0, total);
+      if (reps.filter((r) => r && r.trim()).length < total) return toast("Réponds d'abord à toutes les questions");
+      e.target.disabled = true;
+      const p = progressUI($("progress"), "Le prof corrige ta copie avec le barème…");
+      try {
+        s.correction = await ai.corrigerCopie(f, s, reps, p.update);
+        store.saveFiche(f);
+        store.enregistrerActivite("qcm");
         render();
+        window.scrollTo(0, 0);
       } catch (err) {
         $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
         e.target.disabled = false;
@@ -1254,7 +1345,6 @@ function bindSujet(f) {
         p.stop();
       }
     };
-  }
 }
 
 // --- Prof particulier (chat)

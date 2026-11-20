@@ -319,39 +319,75 @@ const TITRES = {
   bac: ["Sujet type Bac", "2 h"],
   oral: ["Préparation à l'oral", "10 min de présentation"],
 };
+// Sujets structurés question par question (démo).
+const q = (enonce, points, competence, reponse_attendue, bareme, erreurs_frequentes) => ({ enonce, points, competence, reponse_attendue, bareme, erreurs_frequentes });
+const SUJETS = {
+  histoire: {
+    consignes: "Réponds sous chaque question. Rédige des phrases complètes.",
+    exercices: [
+      { titre: "Repères", document: "", questions: [
+        q("À quelle date le peuple de Paris prend-il la Bastille ?", 1, "Connaître", "Le **14 juillet 1789**.", [{ critere: "Date exacte", points: 1 }], "Confondre avec la fête nationale actuelle sans donner l'année."),
+        q("À quelle date la royauté est-elle abolie ?", 1, "Connaître", "Le **21 septembre 1792**.", [{ critere: "Date exacte (jour, mois, année)", points: 1 }], "Répondre 1789 : c'est la prise de la Bastille."),
+        q("Que signifie le sigle DDHC ?", 1, "Connaître", "Déclaration des droits de l'homme et du citoyen.", [{ critere: "Sigle développé sans erreur", points: 1 }], "Oublier « et du citoyen »."),
+      ] },
+      { titre: "Analyse de document", document: "> « Art. 1. Les hommes naissent et demeurent libres et égaux en droits. Les distinctions sociales ne peuvent être fondées que sur l'utilité commune. »\n> *Déclaration des droits de l'homme et du citoyen, 26 août 1789*", questions: [
+        q("Présente le document : sa nature et sa date.", 2, "Analyser un document", "Un article d'un texte juridique, la DDHC, votée par l'Assemblée nationale constituante le 26 août 1789.", [{ critere: "Nature (texte juridique, déclaration)", points: 1 }, { critere: "Date et auteur (Assemblée, 26 août 1789)", points: 1 }], "Ne donner que la date."),
+        q("Quelle idée nouvelle cet article affirme-t-il ?", 3, "Analyser un document", "L'**égalité en droits** et la **liberté** de tous les hommes, dès la naissance.", [{ critere: "Égalité en droits", points: 2 }, { critere: "Liberté", points: 1 }], "Paraphraser sans nommer l'idée."),
+        q("En quoi cet article s'oppose-t-il à la société d'Ancien Régime ?", 4, "Argumenter", "Sous l'Ancien Régime, la société est divisée en **trois ordres inégaux** ; la noblesse et le clergé ont des **privilèges** de naissance. L'article met fin à ces distinctions : seules comptent l'utilité commune.", [{ critere: "Mention des trois ordres ou des privilèges", points: 2 }, { critere: "Lien explicite avec l'article (égalité contre privilèges)", points: 1.5 }, { critere: "Rédaction claire", points: 0.5 }], "Oublier de faire le lien avec le texte."),
+      ] },
+      { titre: "Réponse construite", document: "", questions: [
+        q("Explique en quelques lignes comment la France passe de la monarchie absolue à la République entre 1789 et 1792.", 8, "Argumenter", "1789 : États généraux, serment du Jeu de paume, prise de la Bastille, abolition des privilèges, DDHC. 1791 : monarchie constitutionnelle, fuite à Varennes qui fait perdre confiance au roi. Septembre 1792 : abolition de la royauté, proclamation de la République.", [{ critere: "Étapes de 1789", points: 3 }, { critere: "Monarchie constitutionnelle et Varennes", points: 2 }, { critere: "Abolition de la royauté en 1792", points: 2 }, { critere: "Texte organisé et rédigé", points: 1 }], "Raconter sans ordre chronologique."),
+      ] },
+    ],
+  },
+  maths: {
+    consignes: "Calculatrice autorisée. Justifie chaque réponse.",
+    exercices: [
+      { titre: "Calculs de longueurs", document: "ABC est rectangle en A avec AB = 9 cm et AC = 12 cm.", questions: [
+        q("Quel côté du triangle ABC est l'hypoténuse ?", 1, "Connaître", "[BC], le côté opposé à l'angle droit.", [{ critere: "Côté [BC] identifié", points: 1 }], "Choisir le plus long des côtés donnés."),
+        q("Calcule BC en justifiant.", 4, "Calculer", "ABC est rectangle en A, donc d'après le théorème de Pythagore : BC² = 81 + 144 = 225, donc BC = 15 cm.", [{ critere: "Théorème cité avec l'angle droit", points: 1 }, { critere: "Égalité BC² = AB² + AC²", points: 1 }, { critere: "Calcul juste", points: 1 }, { critere: "BC = 15 cm avec l'unité", points: 1 }], "Additionner les longueurs au lieu des carrés."),
+      ] },
+      { titre: "Triangle rectangle ou non", document: "RST a pour côtés RS = 20 cm, ST = 21 cm et RT = 29 cm.", questions: [
+        q("Le triangle RST est-il rectangle ? Justifie.", 5, "Raisonner", "RT² = 841 et RS² + ST² = 400 + 441 = 841 : l'égalité est vraie, donc d'après la réciproque du théorème de Pythagore, RST est rectangle en S.", [{ critere: "Plus grand côté identifié", points: 1 }, { critere: "Calculs justes", points: 2 }, { critere: "Réciproque citée", points: 1 }, { critere: "Conclusion (rectangle en S)", points: 1 }], "Utiliser le théorème au lieu de la réciproque."),
+      ] },
+      { titre: "Problème", document: "Un écran mesure 80 cm de large et 60 cm de haut. On mesure sa taille par sa diagonale.", questions: [
+        q("Calcule la diagonale de l'écran en centimètres.", 5, "Modéliser", "d² = 80² + 60² = 10 000, donc d = 100 cm.", [{ critere: "Triangle rectangle reconnu", points: 1 }, { critere: "Calcul de d²", points: 2 }, { critere: "d = 100 cm", points: 2 }], "Oublier la racine carrée."),
+        q("Une étagère a une profondeur de 70 cm : l'écran posé à plat y entre-t-il sans dépasser ? Explique.", 5, "Raisonner", "Posé à plat, la largeur (80 cm) ou la hauteur (60 cm) est en profondeur : avec 60 cm en profondeur, il entre (60 < 70) ; avec 80 cm, il dépasse.", [{ critere: "Choix des bonnes dimensions", points: 2 }, { critere: "Comparaison avec 70 cm", points: 2 }, { critere: "Conclusion argumentée", points: 1 }], "Comparer la diagonale à la profondeur."),
+      ] },
+    ],
+  },
+};
 export async function genererSujet(fiche, type, onProgress) {
   await simuler("x".repeat(5000), onProgress, 3500);
-  const s = contenu(fiche).sujet;
+  const base = SUJETS[fiche.demoKey === "maths" ? "maths" : "histoire"];
   const [t, duree] = TITRES[type];
-  let sujet = s.sujet;
-  if (type === "express") sujet = sujet.split("## Exercice 3")[0];
-  if (type === "oral")
-    sujet = `## Ta présentation orale\nPrésente « ${fiche.titre} » en 5 minutes devant le jury, sans lire tes notes.\n\n**Plan conseillé :**\n1. Une phrase d'accroche.\n2. Les notions essentielles (voir ta fiche).\n3. Un exemple précis.\n4. Une conclusion.\n\n**Questions possibles du jury :**\n${s.sujet.split("\n").filter((l) => l.startsWith("## ")).map((l) => "- " + l.replace("## ", "")).join("\n")}`;
-  return { titre: `${t} : ${fiche.titre}`, duree, sujet, corrige: s.corrige };
+  const exercices = type === "express" ? base.exercices.slice(0, 1) : base.exercices;
+  return { titre: `${t} : ${fiche.titre}`, duree, consignes: base.consignes, exercices };
 }
 
-export async function corrigerCopie(fiche, _sujet, reponse, onProgress) {
-  const mots = contenu(fiche).sujet.motsCles;
-  const txt = reponse.toLowerCase();
-  const trouves = mots.filter((m) => txt.includes(m));
-  const manquants = mots.filter((m) => !txt.includes(m));
-  const longueur = Math.min(4, Math.floor(reponse.trim().split(/\s+/).length / 25));
-  const note = Math.max(3, Math.min(19, 4 + trouves.length * 1.5 + longueur));
-  const texte = `## Note : ${Math.round(note)}/20
-
-### Ce qui est réussi
-${trouves.length ? trouves.map((m) => `- Tu utilises bien la notion **${m}**.`).join("\n") : "- Tu as osé te lancer, c'est le plus important !"}
-
-### Ce qui manque
-${manquants.slice(0, 5).map((m) => `- Il manque **${m}** : regarde le corrigé.`).join("\n") || "- Presque rien, bravo !"}
-
-### 3 conseils
-1. Commence chaque réponse par une phrase qui reprend la question.
-2. Cite des dates ou des chiffres précis : ils rapportent des points.
-3. Relis ta fiche « Résumé » puis refais le sujet demain sans regarder.
-
-*Mode démo : cette correction est simplifiée. Avec une clé API, Claude lit vraiment ta copie.*`;
-  return simuler(texte, onProgress, 2500);
+// Correction simplifiée (démo) : on cherche les mots de la réponse attendue dans la copie.
+export async function corrigerCopie(_fiche, sujet, reponses, onProgress) {
+  await simuler("x".repeat(1500), onProgress, 2000);
+  const questions = sujet.exercices.flatMap((e) => e.questions);
+  const niveaux = ["très insuffisant", "insuffisant", "satisfaisant", "très satisfaisant"];
+  const resultats = questions.map((qq, i) => {
+    const mots = (qq.reponse_attendue.toLowerCase().match(/[a-zàâçéèêëîïôûùüÿ0-9]{4,}/g) || []).slice(0, 12);
+    const rep = (reponses[i] || "").toLowerCase();
+    const part = mots.length ? mots.filter((m) => rep.includes(m)).length / mots.length : 0;
+    const ratio = /je ne sais pas/.test(rep) ? 0 : Math.min(1, part * 1.6);
+    return {
+      numero: i + 1,
+      points_obtenus: Math.round(ratio * qq.points * 2) / 2,
+      niveau: niveaux[Math.min(3, Math.floor(ratio * 4))],
+      commentaire: ratio > 0.7 ? "Réponse complète et juste." : ratio > 0.3 ? "Réponse partielle : compare avec la réponse attendue." : "Il manque l'essentiel : relis la fiche sur ce point.",
+    };
+  });
+  return {
+    questions: resultats,
+    appreciation: "Mode démo : correction simplifiée par mots-clés. Avec Claude, chaque réponse est vraiment lue et notée selon le barème.",
+    points_forts: ["Tu as répondu à toutes les questions."],
+    a_travailler: ["Justifie chaque réponse avec le vocabulaire du cours."],
+  };
 }
 
 export async function plusDeFlashcards(fiche, existantes, onProgress) {

@@ -420,6 +420,34 @@ textarea { font-family: inherit; line-height: 1.5; resize: vertical; }
 .puce.ok { background: var(--good); color: #fff; }
 .paliers-ctrl { margin: 4px 0 8px; }
 
+/* Sujet : question par question */
+.sujet-tete h2 { margin-bottom: 4px; }
+.consigne-generale { margin: 8px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--line-2); font-size: .92rem; }
+.exercice { margin: 18px 0 6px; }
+.ex-titre { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin: 0 0 8px; }
+.ex-titre span { color: var(--muted); font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.document { background: var(--line-2); border-color: transparent; }
+.question-bloc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 8px 0; }
+.q-enonce { display: flex; gap: 6px; align-items: baseline; margin: 0 0 8px; font-weight: 600; }
+.q-enonce span { flex: 1; min-width: 0; }
+.q-enonce em { font-style: normal; color: var(--muted); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.question-bloc textarea { margin: 0; }
+.question-bloc textarea[readonly] { background: var(--line-2); }
+.corr { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: .92rem; }
+.corr p { margin: 6px 0 0; }
+.corr-ok { background: var(--good-soft); } .corr-moyen { background: var(--warn-soft); } .corr-ko { background: var(--bad-soft); }
+.corr-tete { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.corr-tete b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.corr-tete span { font-size: .8rem; font-weight: 700; color: var(--muted); }
+.corr details { margin-top: 8px; }
+.corr summary { font-weight: 650; color: var(--primary-ink); }
+.bareme { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 4px; }
+.bareme li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 8px; background: var(--card); font-size: .88rem; }
+.bareme b { white-space: nowrap; }
+.bilan-note { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bilan-note small { font-size: 1rem; color: var(--muted); }
+.bilan-note span { color: var(--muted); font-weight: 650; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 /* Scanner plein écran (toujours sombre : on regarde la caméra) */
 .scanner { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; outline: none; }
