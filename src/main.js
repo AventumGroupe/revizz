@@ -12,6 +12,7 @@ import { POINTS_LANGUE, estRedactionnelle } from "./evaluation.js";
 import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
+import { mascotte, bulle, reactionNote, phraseAccueil } from "./mascotte.js";
 import { preparerPage, changerType } from "./image.js";
 import { etatPaliers, fichesDuChapitre, SEUILS } from "./paliers.js";
 
@@ -140,7 +141,9 @@ afterRender.welcome = () => (document.getElementById("btn-demo").onclick = entre
 function welcome() {
   return `
   <div class="welcome">
+    <div class="welcome-masc">${mascotte("salut", 96)}</div>
     <div class="logo">Révizz</div>
+    <p class="masc-presente">Salut, moi c'est Gribouille, ton prof de poche.</p>
     <p class="big">Tes fiches de cours deviennent des résumés, des flashcards, des QCM et des sujets d'entraînement.</p>
     <ul class="steps">
       <li>${ic("camera", 20)}<span>Prends en photo ta fiche ou ton cahier</span></li>
@@ -185,6 +188,11 @@ function home() {
     <div><p class="eyebrow">${jourDuJour()}</p><h1>Bonjour${s.prenom ? ` ${esc(s.prenom)}` : ""}</h1></div>
     <div class="serie" title="Jours de révision d'affilée">${ic("serie", 16)}<b>${stats.serie}</b></div>
   </header>
+  ${(() => {
+    const c = ctrl.aVenir()[0];
+    const a = phraseAccueil({ prenom: s.prenom, dues, serie: stats.serie, nbFiches: fiches.length, controle: c ? { matiere: c.matiere, jours: ctrl.joursRestants(c) } : null });
+    return bulle(a.humeur, esc(a.texte), { cls: "accueil" });
+  })()}
   ${s.demo ? `<div class="bandeau"><span><b>Mode démo.</b> Réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " N'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="lien" data-go="settings">Me connecter</button>`}</div>` : ""}
 
   <section class="bloc">
@@ -211,7 +219,8 @@ function home() {
           <div class="bloc-titre"><h2>Mes matières</h2><button class="lien" data-go="matieres">Tout voir</button></div>
           <div class="liste-lignes">${avecFiches.slice(0, 5).map((m) => ligneMatiere(m, fiches)).join("")}</div>
         </section>`
-      : `<section class="vide-etat">
+      : `<section class="vide-etat avec-masc">
+          ${mascotte("reflechit", 56)}
           <h2>Ta première fiche</h2>
           <p>Prends en photo un cours ou une fiche : Révizz prépare le résumé, les cartes et les QCM.</p>
           <button class="btn primary big-btn" data-scan="">${ic("camera", 20)} Scanner une fiche</button>
@@ -355,7 +364,8 @@ function matiereView() {
   <div class="entete-matiere" style="--c:${couleur(nom)}">${pastille(nom, "l")}<div><h1>${esc(nom)}</h1><p class="sub">${fiches.length ? `${fiches.length} fiche${fiches.length > 1 ? "s" : ""}` : "Aucune fiche"}</p></div></div>`;
   if (!fiches.length) {
     return `${head}
-    <section class="vide-etat">
+    <section class="vide-etat avec-masc">
+      ${mascotte("salut", 52)}
       <p>Pas encore de fiche en ${esc(nom)}. Scanne ton premier cours pour commencer.</p>
       <button class="btn primary big-btn" data-scan="${esc(nom)}">${ic("camera", 20)} Ajouter une fiche</button>
     </section>
@@ -528,7 +538,7 @@ const lireDataUrl = (file) =>
   });
 function progressUI(el, label) {
   const msgs = ["Je lis ta fiche…", "Je repère les notions importantes…", "Je rédige ta fiche de révision…", "Je prépare les flashcards…", "Presque fini…"];
-  el.innerHTML = `<div class="loading"><div class="spinner"></div><div class="lmsg">${label || msgs[0]}</div><div class="lsub"></div></div>`;
+  el.innerHTML = `<div class="loading">${mascotte("reflechit", 44)}<div><div class="lmsg">${label || msgs[0]}</div><div class="lsub"></div></div></div>`;
   const lmsg = el.querySelector(".lmsg");
   const lsub = el.querySelector(".lsub");
   let i = 0;
@@ -1092,10 +1102,12 @@ function tabQCM(f) {
   }
   if (qcm.i >= qcm.questions.length) {
     const note = Math.round((qcm.score / qcm.questions.length) * 20);
+    const r = reactionNote(note, `qcm${f.id}${qcm.questions.length}`);
     return `<div class="card center done">
+      ${mascotte(r.humeur, 84)}
       <div class="big-num">${note}/20</div>
       <p>${qcm.score} bonne${qcm.score > 1 ? "s" : ""} réponse${qcm.score > 1 ? "s" : ""} sur ${qcm.questions.length}</p>
-      <p class="sub">${note >= 16 ? "Excellent, tu maîtrises !" : note >= 12 ? "Bien joué, encore un petit effort" : "Relis le résumé puis réessaie, tu vas y arriver"}</p>
+      <p class="sub masc-dit">${esc(r.texte)}</p>
       ${qcm.erreurs.length ? `<h3>À revoir</h3><ul class="keys">${qcm.erreurs.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
       <div class="row"><button class="btn secondary" id="qcm-fin">Terminer</button><button class="btn primary" id="qcm-again">Nouveau QCM</button></div>
     </div>`;
@@ -1246,6 +1258,10 @@ function tabSujet(f) {
   ${
     corrige
       ? `<div class="card bilan">
+          ${(() => {
+            const r = reactionNote(note.sur20, s.titre);
+            return bulle(r.humeur, esc(r.texte), { taille: 56 });
+          })()}
           <div class="bilan-note"><b class="big-num">${fmt(note.sur20)}<small>/20</small></b><span>${fmt(note.obtenu)} point${note.obtenu > 1 ? "s" : ""} sur ${fmt(note.total)}</span></div>
           ${note.plafonne ? `<p class="alerte">Note ramenée sous la moyenne : la copie est défaillante sur l'ensemble de la langue (règle des épreuves rédactionnelles).</p>` : ""}
           <p>${esc(s.correction.appreciation)}</p>
@@ -1404,8 +1420,8 @@ function tabProf(f) {
   const suggestions = ["Explique-moi ce cours comme si j'avais 10 ans", "Quelles sont les 3 choses les plus importantes ?", "Donne-moi un exemple concret", "Pose-moi une question pour vérifier"];
   return `
   <div class="chat" id="chat">
-    <div class="bubble bot">Salut ! Je suis ton prof pour « ${esc(f.titre)} ». Qu'est-ce que tu n'as pas compris ?</div>
-    ${f.chat.map((m) => `<div class="bubble ${m.role === "user" ? "me" : "bot md"}">${m.role === "user" ? esc(m.content) : md(m.content)}</div>`).join("")}
+    <div class="msg-bot"><span class="avatar">${mascotte("salut", 34)}</span><div class="bubble bot">Salut ! Moi c'est Gribouille, ton prof pour « ${esc(f.titre)} ». Qu'est-ce que tu n'as pas compris ?</div></div>
+    ${f.chat.map((m) => (m.role === "user" ? `<div class="bubble me">${esc(m.content)}</div>` : `<div class="msg-bot"><span class="avatar">${mascotte("content", 34)}</span><div class="bubble bot md">${md(m.content)}</div></div>`)).join("")}
     <div id="live"></div>
   </div>
   ${!f.chat.length ? `<div class="sugg">${suggestions.map((s) => `<button class="chip" data-sugg="${esc(s)}">${esc(s)}</button>`).join("")}</div>` : ""}
@@ -1423,10 +1439,11 @@ function bindProf(f) {
     f.chat.push({ role: "user", content: texte.trim() });
     store.saveFiche(f);
     render();
-    const live = $("live");
-    live.className = "bubble bot md";
-    live.innerHTML = `<span class="dots"><i></i><i></i><i></i></span>`;
-    live.scrollIntoView({ block: "end" });
+    const cadre = $("live");
+    cadre.className = "msg-bot";
+    cadre.innerHTML = `<span class="avatar">${mascotte("reflechit", 34)}</span><div class="bubble bot md"><span class="dots"><i></i><i></i><i></i></span></div>`;
+    const live = cadre.querySelector(".bubble");
+    cadre.scrollIntoView({ block: "end" });
     try {
       const rep = await ai.discuter(f, f.chat.slice(-20), (_, acc) => {
         live.innerHTML = md(acc);
@@ -2078,8 +2095,11 @@ function testView() {
         : test.type === "palier1"
           ? `<p class="sub">${note >= SEUILS.noteQcm ? (etatPaliers(ui.matiere, ui.chapitre).p1 ? "Palier 1 validé : passe aux exercices d'application !" : `Bravo ! Pour valider le palier 1, révise aussi les cartes (${SEUILS.cartesConnues} % à connaître).`) : `Il faut ${SEUILS.noteQcm}/20 pour valider le palier 1 : relis la fiche et retente.`}</p>`
           : `<p class="sub">C'est ton point de départ. Révise les fiches et les cartes du chapitre, puis fais le test final !</p>`;
+    const r = reactionNote(note, `test${test.type}${ui.chapitre}`);
     return `${head}<div class="card center done">
+      ${mascotte(r.humeur, 84)}
       <div class="big-num">${note}/20</div><p class="sub">${humeur(note)}</p>
+      <p class="masc-dit">${esc(r.texte)}</p>
       <p>${test.score} bonne${test.score > 1 ? "s" : ""} réponse${test.score > 1 ? "s" : ""} sur ${test.questions.length}</p>
       ${comparaison}
       ${test.erreurs.length ? `<h3>À revoir</h3><ul class="keys">${test.erreurs.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}

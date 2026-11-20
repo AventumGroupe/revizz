@@ -498,3 +498,36 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .erreurs-langue b { color: var(--good); font-weight: 650; }
 .erreurs-langue small { color: var(--muted); }
 .nowrap { white-space: nowrap; }
+
+/* Gribouille, la mascotte */
+.masc { display: block; flex: none; overflow: visible; }
+.masc .bras { stroke: #1d4ed8; stroke-width: 7; stroke-linecap: round; fill: none; }
+.masc-yeux { transform-box: fill-box; transform-origin: center; animation: masc-cligne 5s infinite; }
+@keyframes masc-cligne { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+.masc-salut .bras-coucou { transform-box: view-box; transform-origin: 97px 84px; animation: masc-coucou 1.2s ease-in-out 2; }
+@keyframes masc-coucou { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-14deg); } 75% { transform: rotate(10deg); } }
+.masc-bravo .masc-corps { animation: masc-saut .7s cubic-bezier(.3, 1.6, .5, 1) 2; }
+@keyframes masc-saut { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } }
+.masc .etincelle { transform-box: fill-box; transform-origin: center; animation: masc-brille 1.4s ease-in-out infinite; }
+@keyframes masc-brille { 0%, 100% { transform: scale(.4); opacity: .3; } 50% { transform: scale(1); opacity: 1; } }
+.masc-reflechit .masc-corps { transform-box: view-box; transform-origin: 60px 126px; animation: masc-balance 2.4s ease-in-out infinite; }
+@keyframes masc-balance { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+.masc-reflechit .masc-pensee circle { animation: masc-pensee 1.8s ease-in-out infinite; }
+.masc-reflechit .masc-pensee circle:nth-child(2) { animation-delay: .2s; } .masc-reflechit .masc-pensee circle:nth-child(3) { animation-delay: .4s; }
+@keyframes masc-pensee { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+.masc-courage .masc-corps { transform-box: view-box; transform-origin: 60px 126px; animation: masc-hoche 2s ease-in-out 2; }
+@keyframes masc-hoche { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
+
+.masc-bulle { display: flex; align-items: flex-end; gap: 10px; margin: 6px 0 14px; }
+.masc-texte { position: relative; margin: 0 0 18px; padding: 10px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; border-bottom-left-radius: 4px; font-weight: 600; font-size: .95rem; line-height: 1.4; box-shadow: 0 2px 10px rgba(15, 23, 42, .05); }
+.masc-bulle.accueil .masc-texte { background: var(--soft); border-color: transparent; }
+.card.center .masc { margin: 0 auto 4px; }
+.masc-dit { font-weight: 600; color: var(--text); margin: 6px 0; }
+.vide-etat.avec-masc .masc { margin-bottom: 6px; }
+.welcome-masc { display: flex; justify-content: flex-start; margin-bottom: 4px; }
+.masc-presente { font-weight: 650; color: var(--primary-ink); margin: 0 0 6px; }
+.msg-bot { display: flex; align-items: flex-end; gap: 6px; align-self: flex-start; max-width: 94%; }
+.msg-bot .bubble { max-width: 100%; }
+.msg-bot .avatar { flex: none; width: 34px; }
+.loading .masc { margin: -6px 0; }
+@media (prefers-reduced-motion: reduce) { .masc * { animation: none !important; } }
