@@ -13,6 +13,7 @@ import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
 import { mascotte, bulle, reactionNote, phraseAccueil } from "./mascotte.js";
+import * as jeu from "./jeu.js";
 import { preparerPage, changerType } from "./image.js";
 import { etatPaliers, fichesDuChapitre, SEUILS } from "./paliers.js";
 
@@ -68,6 +69,34 @@ function toast(msg) {
   setTimeout(() => t.remove(), 2600);
 }
 
+// ---------- Célébrations (badges, niveaux, objectif du jour) ----------
+const aCelebrer = [];
+function celebrer() {
+  if (document.querySelector(".modal")) return setTimeout(celebrer, 800);
+  const ev = aCelebrer.shift();
+  if (!ev) return;
+  const confettis = Array.from({ length: 18 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 6) * 0.12}s;--c:${["#2563eb", "#f5b301", "#12a150", "#60a5fa", "#e8590c"][i % 5]}"></i>`).join("");
+  modale(
+    `<div class="fete"><div class="confettis">${confettis}</div>
+      ${mascotte("bravo", 96)}
+      ${ev.icone ? `<span class="badge-rond gagne">${ic(ev.icone, 26)}</span>` : ""}
+      <h3>${esc(ev.titre)}</h3><p>${esc(ev.texte)}</p>
+      <button class="btn primary big-btn" data-ok>Trop bien !</button></div>`,
+    (box, fermer) => (box.querySelector("[data-ok]").onclick = () => (fermer(), setTimeout(celebrer, 250)))
+  );
+}
+function annoncer(evts) {
+  const gros = evts.filter((e) => !e.petit);
+  evts.filter((e) => e.petit).forEach((e) => toast(e.texte));
+  // Plusieurs badges d'un coup : une seule fête, pour ne pas enchaîner les fenêtres.
+  const badges = gros.filter((e) => e.type === "badge");
+  if (badges.length > 2) {
+    aCelebrer.push(...gros.filter((e) => e.type !== "badge"), { type: "badge", titre: `${badges.length} badges débloqués`, texte: "Va les voir dans ton profil !", icone: "medaille" });
+  } else aCelebrer.push(...gros);
+  setTimeout(celebrer, 600);
+}
+jeu.surEvenement(annoncer);
+
 // ---------- Navigation ----------
 let ui = { view: "home", ficheId: null, tab: "resume", matiere: null, retour: "home" };
 const go = (patch) => {
@@ -122,6 +151,7 @@ function quitterDemo() {
   store.getFiches().filter((f) => f.demoKey).forEach((f) => store.deleteFiche(f.id));
   store.supprimerProgresDemo();
   ctrl.supprimerControlesDemo();
+  store.ecrire("revizz.jeuDemo", {});
 }
 
 function render() {
@@ -186,7 +216,7 @@ function home() {
   return `
   <header class="page-head">
     <div><p class="eyebrow">${jourDuJour()}</p><h1>Bonjour${s.prenom ? ` ${esc(s.prenom)}` : ""}</h1></div>
-    <div class="serie" title="Jours de révision d'affilée">${ic("serie", 16)}<b>${stats.serie}</b></div>
+    <div class="chips-tete"><button class="niveau-chip" data-go="settings" title="Mon niveau">Niv. ${jeu.niveauDe(jeu.gouttesTotales()).niveau}</button><div class="serie" title="Jours de révision d'affilée">${ic("serie", 16)}<b>${stats.serie}</b></div></div>
   </header>
   ${(() => {
     const c = ctrl.aVenir()[0];
@@ -207,6 +237,8 @@ function home() {
     </div>
   </section>
 
+  ${fiches.length ? objectifHTML() : ""}
+
   ${rappelSauvegarde(fiches)}
 
   ${
@@ -226,6 +258,45 @@ function home() {
           <button class="btn primary big-btn" data-scan="">${ic("camera", 20)} Scanner une fiche</button>
         </section>`
   }`;
+}
+// Objectif du jour et quêtes du jour (accueil).
+function objectifHTML() {
+  const g = jeu.aujourdhui().g;
+  const pct = Math.min(100, Math.round((g / jeu.OBJECTIF_JOUR) * 100));
+  const qs = jeu.quetesDuJour();
+  return `<section class="bloc">
+    <div class="bloc-titre"><h2>Objectif du jour</h2><span class="gouttes">${goutte()} ${g} / ${jeu.OBJECTIF_JOUR}</span></div>
+    <div class="card objectif">
+      <div class="obj-barre ${pct >= 100 ? "fini" : ""}"><i style="width:${pct}%"></i></div>
+      <ul class="quetes">${qs
+        .map((q) => `<li class="${q.finie ? "finie" : ""}"><span class="q-coche">${q.finie ? ic("ok", 14) : ""}</span><span class="q-txt">${esc(q.txt)}</span><span class="q-prog">${q.fait}/${q.but}</span></li>`)
+        .join("")}</ul>
+      <p class="hint">Chaque quête rapporte 10 gouttes d'encre de bonus.</p>
+    </div>
+  </section>`;
+}
+const goutte = (t = 14) => `<svg class="goutte" width="${t}" height="${t}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C12 2 20 11 20 15.5A8 8 0 0 1 4 15.5C4 11 12 2 12 2Z" fill="currentColor"/></svg>`;
+// Profil : niveau, semaine et badges.
+function jeuProfilHTML() {
+  const total = jeu.gouttesTotales();
+  const nv = jeu.niveauDe(total);
+  const sem = jeu.semaine();
+  const max = Math.max(jeu.OBJECTIF_JOUR, ...sem.map((d) => d.g));
+  const obtenus = jeu.badgesObtenus();
+  const JOURS = ["D", "L", "M", "M", "J", "V", "S"];
+  return `<div class="card parcours-jeu">
+    <div class="nv-tete">${mascotte(nv.niveau >= 5 ? "bravo" : "content", 56)}<div><p class="eyebrow">Niveau ${nv.niveau}</p><h2>${esc(nv.titre)}</h2><p class="gouttes">${goutte()} ${total} gouttes d'encre</p></div></div>
+    <div class="obj-barre"><i style="width:${nv.pct}%"></i></div>
+    <p class="hint">Encore ${nv.pour - nv.dans} gouttes pour le niveau ${nv.niveau + 1}.</p>
+    <h3>Ma semaine</h3>
+    <div class="semaine">${sem
+      .map((d) => `<div class="sj ${d.g >= jeu.OBJECTIF_JOUR ? "ok" : ""}"><i style="height:${Math.max(4, Math.round((d.g / max) * 100))}%"></i><small>${JOURS[new Date(d.jour).getDay()]}</small></div>`)
+      .join("")}</div>
+    <h3>Mes badges <small>${Object.keys(obtenus).length}/${jeu.BADGES.length}</small></h3>
+    <div class="succes-grille">${jeu.BADGES.map(
+      (b) => `<div class="succes ${obtenus[b.id] ? "gagne" : ""}" title="${esc(b.desc)}"><span class="badge-rond">${ic(b.icone, 22)}</span><b>${esc(b.nom)}</b><small>${esc(b.desc)}</small></div>`
+    ).join("")}</div>
+  </div>`;
 }
 // Petite pastille ronde avec une icône d'interface (pas une matière).
 const pastilleIcone = (icone, couleurHex) => `<span class="pastille pastille-m" style="--c:${couleurHex}">${ic(icone, 18)}</span>`;
@@ -536,6 +607,11 @@ const lireDataUrl = (file) =>
     r.onerror = rej;
     r.readAsDataURL(file);
   });
+// Gouttes d'un QCM ou d'un test : 5 pour l'avoir fini, 1 par bonne réponse, 10 de bonus pour un sans-faute.
+function gagnerQcm(score, total) {
+  const note = Math.round((score / total) * 20);
+  jeu.gagner(5 + score + (score === total ? 10 : 0), { qcm: 1, ...(note >= 16 ? { qcm16: 1 } : {}), ...(score === total ? { qcm_parfait: 1 } : {}) });
+}
 function progressUI(el, label) {
   const msgs = ["Je lis ta fiche…", "Je repère les notions importantes…", "Je rédige ta fiche de révision…", "Je prépare les flashcards…", "Presque fini…"];
   el.innerHTML = `<div class="loading">${mascotte("reflechit", 44)}<div><div class="lmsg">${label || msgs[0]}</div><div class="lsub"></div></div></div>`;
@@ -612,6 +688,7 @@ async function creerDepuisTexte(texte, zone) {
     if (relecture?.matiere) r.matiere = relecture.matiere;
     const fiche = nouvelleFiche(r);
     store.saveFiche(fiche);
+    jeu.gagner(15, { fiche: 1 });
     const retour = relecture?.retour || ui.retour;
     pages = [];
     scanNote = "";
@@ -1032,6 +1109,7 @@ function bindSession(s, onEnd) {
     if (vraie) store.noterCarte(vraie, sue);
     store.saveFiche(fiche);
     store.enregistrerActivite("carte");
+    jeu.gagner(sue ? 2 : 1, sue ? { carte: 1, carte_sue: 1 } : { carte: 1 });
     if (sue) s.sues++;
     s.i++;
     s.retourne = false;
@@ -1115,6 +1193,7 @@ function tabQCM(f) {
   const q = qcm.questions[qcm.i];
   const rep = qcm.choisi;
   return `
+  <div class="qcm-tete"><div class="qcm-barre"><i style="width:${Math.round(((qcm.i + (rep !== null ? 1 : 0)) / qcm.questions.length) * 100)}%"></i></div>${(qcm.combo || 0) >= 3 ? `<span class="combo">${ic("serie", 14)} Combo x${qcm.combo}</span>` : ""}</div>
   <div class="counter">Question ${qcm.i + 1} / ${qcm.questions.length} · Score ${qcm.score}</div>
   <div class="card question">${esc(q.question)}</div>
   <div class="choices">${q.choix
@@ -1126,7 +1205,7 @@ function tabQCM(f) {
     .join("")}</div>
   ${
     rep !== null
-      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? "Bravo !" : "Raté."} ${esc(q.explication)}</div>
+      ? `<div class="explain ${rep === q.bonne_reponse ? "ok" : "ko"}">${rep === q.bonne_reponse ? ((qcm.combo || 0) >= 3 ? `${qcm.combo} d'affilée, bravo !` : "Bravo !") : "Raté."} ${esc(q.explication)}</div>
          <button class="btn primary big-btn" id="qcm-next">${qcm.i + 1 < qcm.questions.length ? "Question suivante →" : "Voir mon score"}</button>`
       : ""
   }
@@ -1165,8 +1244,13 @@ function bindQCM(f) {
       (b.onclick = () => {
         const q = qcm.questions[qcm.i];
         qcm.choisi = +b.dataset.choix;
-        if (qcm.choisi === q.bonne_reponse) qcm.score++;
-        else qcm.erreurs.push(`${q.question} → ${q.choix[q.bonne_reponse]}`);
+        if (qcm.choisi === q.bonne_reponse) {
+          qcm.score++;
+          qcm.combo = (qcm.combo || 0) + 1;
+        } else {
+          qcm.combo = 0;
+          qcm.erreurs.push(`${q.question} → ${q.choix[q.bonne_reponse]}`);
+        }
         render();
       })
   );
@@ -1178,6 +1262,7 @@ function bindQCM(f) {
         f.qcm.push({ date: Date.now(), score: qcm.score, total: qcm.questions.length, niveau: qcm.niveau });
         store.saveFiche(f);
         store.enregistrerActivite("qcm");
+        gagnerQcm(qcm.score, qcm.questions.length);
       }
       render();
     };
@@ -1220,6 +1305,18 @@ function tabSujet(f) {
       <p class="hint">Une question à la fois, ta réponse juste en dessous. La correction et le barème apparaissent quand tu rends ta copie.</p>
       <button class="btn primary big-btn" id="gen-sujet">Générer le sujet</button>
       <div id="progress"></div>
+    </div>
+    <div class="card">
+      <h3>Sujets officiels et annales</h3>
+      <p class="hint">Télécharge un sujet officiel (ou prends en photo un devoir de ton prof), puis importe-le : Révizz le transforme en sujet à remplir, avec barème et correction.</p>
+      <button class="btn secondary big-btn" id="btn-annale">${ic("telecharger", 18)} Importer un sujet (PDF ou photos)</button>
+      <input type="file" id="file-annale" accept="image/*,application/pdf" multiple hidden>
+      <details class="aide"><summary>Où trouver des sujets gratuits</summary>
+        <div class="liste-lignes">${liensAnnales(f.matiere)
+          .map(([url, nom, desc]) => `<a class="ligne" href="${url}" target="_blank" rel="noopener"><span class="ligne-txt"><b>${nom}</b><small>${desc}</small></span>${ic("suite", 18, "chevron")}</a>`)
+          .join("")}</div>
+      </details>
+      <div id="progress-annale"></div>
     </div>
     ${
       f.sujets.length
@@ -1324,6 +1421,17 @@ function tabSujet(f) {
   }
   <div id="progress"></div>`;
 }
+// Banques de sujets gratuites et officielles.
+function liensAnnales(matiere) {
+  const l = [
+    ["https://www.education.gouv.fr/reussir-au-lycee/bns", "Banque nationale de sujets", "Sujets officiels de 1re et terminale (ministère)"],
+    ["https://www.education.gouv.fr/brevet-bac-et-cap-les-sujets-des-examens-2025-450400", "Sujets du bac et du brevet", "Les sujets officiels des dernières sessions"],
+    ["https://eduscol.education.gouv.fr/5202/preparer-le-diplome-national-du-brevet-dnb-avec-les-sujets-des-annales", "Annales du brevet (Éduscol)", "Pour consolider les bases du collège"],
+  ];
+  if (matiere === "Mathématiques") l.push(["https://www.apmep.fr", "APMEP", "Annales de maths corrigées par des professeurs (rubrique Annales)"]);
+  if (matiere === "NSI") l.push(["https://eduscol.education.fr/2661/banque-des-epreuves-pratiques-de-specialite-nsi", "Épreuves pratiques de NSI", "Banque officielle d'exercices de programmation"]);
+  return l;
+}
 function bindSujet(f) {
   const $ = (id) => document.getElementById(id);
   document.querySelectorAll("[data-stype]").forEach((b) => (b.onclick = () => ((sujetType = b.dataset.stype), render())));
@@ -1344,6 +1452,35 @@ function bindSujet(f) {
       } catch (err) {
         $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
         e.target.disabled = false;
+      } finally {
+        p.stop();
+      }
+    };
+  if ($("btn-annale")) $("btn-annale").onclick = () => $("file-annale").click();
+  if ($("file-annale"))
+    $("file-annale").onchange = async (ev) => {
+      const fichiers = [...ev.target.files];
+      if (!fichiers.length) return;
+      const pagesSujet = [];
+      for (const fi of fichiers) {
+        if (fi.type === "application/pdf") {
+          if (fi.size > 25 * 1024 * 1024) return toast("PDF trop lourd (25 Mo max).");
+          pagesSujet.push({ kind: "pdf", data: (await lireDataUrl(fi)).split(",")[1], name: fi.name });
+        } else if (fi.type.startsWith("image/")) pagesSujet.push(await preparerPage(await lireDataUrl(fi), "imprime"));
+      }
+      if (!pagesSujet.length) return toast("Choisis un PDF ou des photos.");
+      $("btn-annale").disabled = true;
+      const p = progressUI($("progress-annale"), "Je lis le sujet et je prépare le barème…");
+      try {
+        const sj = await ai.importerSujet(f, pagesSujet, p.update);
+        f.sujets.unshift({ ...sj, type: "annale", date: Date.now(), reponses: [], langueSur: POINTS_LANGUE });
+        f.sujets = f.sujets.slice(0, 10);
+        store.saveFiche(f);
+        sujetOuvert = 0;
+        render();
+      } catch (err) {
+        $("progress-annale").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+        $("btn-annale").disabled = false;
       } finally {
         p.stop();
       }
@@ -1403,6 +1540,10 @@ function bindSujet(f) {
         s.correction = await ai.corrigerCopie(f, s, reps, p.update);
         store.saveFiche(f);
         store.enregistrerActivite("qcm");
+        {
+          const nt = noteDuSujet(s, f.matiere);
+          jeu.gagner(10 + Math.round(nt.sur20), { sujet: 1, ...(nt.sur20 >= 16 ? { sujet16: 1 } : {}), ...(nt.lsur && nt.langue >= nt.lsur ? { langue_max: 1 } : {}) });
+        }
         render();
         window.scrollTo(0, 0);
       } catch (err) {
@@ -1438,6 +1579,7 @@ function bindProf(f) {
     chatBusy = true;
     f.chat.push({ role: "user", content: texte.trim() });
     store.saveFiche(f);
+    jeu.gagner(2, { prof: 1 });
     render();
     const cadre = $("live");
     cadre.className = "msg-bot";
@@ -1478,6 +1620,7 @@ function settings() {
   const s = store.getSettings();
   return `
   <header class="page-head"><div><p class="eyebrow">Profil et réglages</p><h1>${s.prenom ? esc(s.prenom) : "Profil"}</h1></div></header>
+  ${jeuProfilHTML()}
   <label class="field">Ton prénom<input id="prenom" value="${esc(s.prenom)}" placeholder="ex : Lucas"></label>
   <label class="field">Ta classe<select id="classe">${CLASSES.map((c) => `<option ${c === s.classe ? "selected" : ""}>${c}</option>`).join("")}</select></label>
   ${
@@ -1962,6 +2105,7 @@ afterRender.exos = () => {
         p.p2.etat[+i] = st;
         ecrire(p);
         store.enregistrerActivite("qcm");
+        jeu.gagner(res === "reussi" ? 8 : 2, res === "reussi" ? { exo: 1 } : {});
         if (etatPaliers(m, c).p2 && res === "reussi") toast("Palier 2 validé : place au défi !");
         render();
       })
@@ -2041,6 +2185,7 @@ afterRender.defi = () => {
       p.p3 = { ...p.p3, reponse, evaluation, valide: p.p3.valide || !!evaluation.valide, essais: (p.p3.essais || 0) + 1 };
       store.saveProgres(m, c, p);
       store.enregistrerActivite("qcm");
+      jeu.gagner(evaluation.valide ? 40 : 10, evaluation.valide ? { defi: 1, defi_valide: 1 } : { defi: 1 });
       if (evaluation.valide) toast("Palier 3 validé !");
       render();
     } catch (err) {
@@ -2151,6 +2296,7 @@ afterRender.test = () => {
         else p.finals = [...(p.finals || []), resultat];
         store.saveProgres(ui.matiere, ui.chapitre, p);
         store.enregistrerActivite("qcm");
+        gagnerQcm(test.score, test.questions.length);
       }
       render();
       window.scrollTo(0, 0);
@@ -2531,6 +2677,11 @@ app.addEventListener("click", (e) => {
 render();
 // Synchronisation automatique : quand des fiches arrivent d'un autre appareil, on rafraîchit l'écran
 // (sauf pendant que l'élève écrit, pour ne pas lui faire perdre sa saisie).
+// Badges déjà mérités (par exemple après une mise à jour de l'appli).
+setTimeout(() => {
+  const n = jeu.verifierBadges();
+  if (n.length) annoncer(n);
+}, 1500);
 if (!DEMO_ONLY)
   synchro.demarrer((bilan) => {
     const el = document.activeElement;

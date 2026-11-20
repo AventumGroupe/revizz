@@ -3,9 +3,10 @@
 // Sur le site web : le fichier est téléchargé, puis repris de l'autre côté avec « Reprendre une sauvegarde ».
 import { Capacitor } from "@capacitor/core";
 import { lire, ecrire } from "./store.js";
+import { fusionJeu } from "./jeu.js";
 
 // Tout ce qui fait le travail de l'élève. Les secrets (clé API, code famille) ne sont jamais exportés.
-export const CLES = ["revizz.fiches", "revizz.stats", "revizz.matieres", "revizz.matieresMaj", "revizz.progres", "revizz.controles", "revizz.supprimes"];
+export const CLES = ["revizz.fiches", "revizz.stats", "revizz.matieres", "revizz.matieresMaj", "revizz.progres", "revizz.controles", "revizz.supprimes", "revizz.jeu"];
 const KEY_SETTINGS = "revizz.settings";
 const KEY_DERNIERE = "revizz.derniereSauvegarde";
 
@@ -109,6 +110,7 @@ export function fusionDonnees(a = {}, b = {}) {
   for (const c of b["revizz.controles"] || []) if (!ctrl.has(c.id) || fraicheur(c) > fraicheur(ctrl.get(c.id))) ctrl.set(c.id, c);
   out["revizz.controles"] = [...ctrl.values()].filter((c) => vivant("controle", c));
 
+  if (b["revizz.jeu"]) out["revizz.jeu"] = fusionJeu(a["revizz.jeu"], b["revizz.jeu"]);
   const st = a["revizz.stats"], st2 = b["revizz.stats"];
   if (st2) {
     const base = st || { serie: 0, dernierJour: null, cartesRevisees: 0, qcmFaits: 0 };

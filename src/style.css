@@ -531,3 +531,46 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .msg-bot .avatar { flex: none; width: 34px; }
 .loading .masc { margin: -6px 0; }
 @media (prefers-reduced-motion: reduce) { .masc * { animation: none !important; } }
+
+/* Jeu : gouttes, niveaux, quêtes, badges */
+.goutte { color: var(--primary); vertical-align: -2px; }
+.gouttes { font-weight: 700; color: var(--primary-ink); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.chips-tete { display: flex; gap: 8px; align-items: center; }
+.niveau-chip { border: 0; background: var(--soft); color: var(--primary-ink); font-weight: 800; font-size: .85rem; padding: 7px 11px; border-radius: 999px; font-family: inherit; }
+.obj-barre { height: 12px; border-radius: 999px; background: var(--line-2); overflow: hidden; margin: 4px 0 10px; }
+.obj-barre i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #60a5fa, var(--primary)); transition: width .5s ease; }
+.obj-barre.fini i { background: linear-gradient(90deg, #4ade80, var(--good)); }
+.quetes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.quetes li { display: flex; align-items: center; gap: 10px; font-size: .93rem; }
+.q-coche { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; flex: none; color: #fff; }
+.quetes li.finie .q-coche { background: var(--good); border-color: var(--good); }
+.quetes li.finie .q-txt { color: var(--muted); text-decoration: line-through; }
+.q-txt { flex: 1; } .q-prog { color: var(--muted); font-weight: 700; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.qcm-tete { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.qcm-barre { flex: 1; height: 10px; border-radius: 999px; background: var(--line-2); overflow: hidden; }
+.qcm-barre i { display: block; height: 100%; background: var(--good); border-radius: inherit; transition: width .4s ease; }
+.combo { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-weight: 800; font-size: .82rem; animation: combo-pop .35s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes combo-pop { from { transform: scale(.6); } to { transform: scale(1); } }
+.parcours-jeu h3 { display: flex; justify-content: space-between; align-items: baseline; }
+.parcours-jeu h3 small { color: var(--muted); font-weight: 700; }
+.nv-tete { display: flex; gap: 12px; align-items: center; }
+.nv-tete h2 { margin: 0; } .nv-tete .eyebrow { margin: 0; } .nv-tete .gouttes { margin: 2px 0 0; }
+.semaine { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; height: 90px; align-items: end; }
+.sj { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+.sj i { width: 100%; max-width: 26px; border-radius: 6px 6px 3px 3px; background: var(--line); }
+.sj.ok i { background: var(--primary); }
+.sj small { color: var(--muted); font-size: .75rem; font-weight: 700; }
+.succes-grille { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.succes { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 10px 4px; border-radius: 12px; background: var(--line-2); opacity: .55; filter: grayscale(1); }
+.succes.gagne { opacity: 1; filter: none; background: var(--soft); }
+.succes b { font-size: .78rem; line-height: 1.2; } .succes small { font-size: .68rem; color: var(--muted); line-height: 1.2; }
+.badge-rond { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--muted); border: 2px solid var(--line); }
+.succes.gagne .badge-rond, .badge-rond.gagne { background: linear-gradient(160deg, #fde68a, #f5b301); color: #7c4a03; border-color: #f5b301; box-shadow: 0 3px 0 #c98c00; }
+.fete { position: relative; text-align: center; overflow: hidden; }
+.fete .masc { margin: 0 auto; }
+.fete .badge-rond { margin: 6px auto 0; width: 56px; height: 56px; }
+.fete h3 { margin: 10px 0 4px; font-size: 1.25rem; }
+.confettis { position: absolute; inset: 0; pointer-events: none; }
+.confettis i { position: absolute; top: -12px; left: var(--x); width: 8px; height: 12px; border-radius: 2px; background: var(--c); animation: confetti 1.6s ease-in var(--d) forwards; }
+@keyframes confetti { to { transform: translateY(320px) rotate(540deg); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .confettis, .combo { animation: none !important; } .confettis { display: none; } }

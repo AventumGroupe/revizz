@@ -607,6 +607,34 @@ ${referentielPourSujet(fiche.matiere) || APPLICATION_PAR_MATIERE}`,
   );
 }
 
+/**
+ * Transforme un sujet d'annale (photos ou PDF, avec parfois son corrigé ou son barème officiel) en sujet interactif.
+ * pages : comme pour transcrire (images préparées ou PDF).
+ */
+async function importerSujetClaude(fiche, pages, onProgress) {
+  const content = [];
+  pages.forEach((p, i) => {
+    content.push({ type: "text", text: p.kind === "pdf" ? `Document PDF ${p.name || ""}` : `Page ${i + 1}` });
+    content.push(
+      p.kind === "pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } }
+        : { type: "image", source: { type: "base64", media_type: p.mediaType, data: p.data } }
+    );
+  });
+  content.push({
+    type: "text",
+    text: `Voici un sujet officiel (annale du bac ou du brevet, Banque nationale de sujets, ou devoir donné en classe), peut-être avec son corrigé ou son barème. Transforme-le en sujet interactif pour un élève de ${getSettings().classe || "Seconde"} :
+- Recopie fidèlement les énoncés et les consignes ; les documents (textes, tableaux, données) en Markdown ; décris en texte les cartes, graphiques et images.
+- Découpe en questions où l'élève répond juste en dessous ; une question longue (dissertation, commentaire, question problématisée, problème) reste une seule question.
+- Garde les points officiels s'ils sont indiqués ; sinon propose un barème réaliste (total ${20 - POINTS_LANGUE} pour les questions, les ${POINTS_LANGUE} derniers points vont à la maîtrise de la langue).
+- Réponse attendue : utilise le corrigé officiel s'il est fourni, sinon rédige-la. Barème détaillé critère par critère, sur les idées et non sur des mots exacts.
+- Indique le type d'exercice officiel et sa méthode. Le titre reprend l'origine du sujet (ex : « Bac 2025, Métropole »).
+- N'invente pas de questions qui ne sont pas dans le document.
+${referentielPourSujet(fiche.matiere)}`,
+  });
+  return runJSON({ ...baseParams({ effort: "medium", maxTokens: 32000, system: systemCours(fiche) }), messages: [{ role: "user", content }] }, SUJET_SCHEMA, onProgress);
+}
+
 /** reponses : tableau des réponses de l'élève, dans l'ordre des questions du sujet. */
 async function corrigerCopieClaude(fiche, sujet, reponses, onProgress) {
   let n = 0;
@@ -700,6 +728,7 @@ export const transcrire = choisir(transcrireClaude, demo.transcrire);
 export const creerFiche = choisir(creerFicheClaude, demo.creerFiche);
 export const genererQCM = choisir(genererQCMClaude, demo.genererQCM);
 export const genererSujet = choisir(genererSujetClaude, demo.genererSujet);
+export const importerSujet = choisir(importerSujetClaude, (fiche, _pages, onProgress) => demo.genererSujet(fiche, "bac", onProgress));
 export const corrigerCopie = choisir(corrigerCopieClaude, demo.corrigerCopie);
 export const plusDeFlashcards = choisir(plusDeFlashcardsClaude, demo.plusDeFlashcards);
 export const discuter = choisir(discuterClaude, demo.discuter);
