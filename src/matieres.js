@@ -47,7 +47,10 @@ export function getMatieres() {
   const liste = lire(KEY, null) ?? PAR_DEFAUT.map((nom) => ({ ...duCatalogue(nom) }));
   return [...liste, AUTRE];
 }
-const sauver = (liste) => ecrire(KEY, liste.filter((m) => m.nom !== AUTRE.nom));
+const sauver = (liste) => {
+  ecrire(KEY, liste.filter((m) => m.nom !== AUTRE.nom));
+  ecrire("revizz.matieresMaj", Date.now()); // pour la synchronisation : la liste la plus récente gagne
+};
 
 export function ajouterMatiere({ nom, emoji = "📘", couleur = COULEURS[0] }) {
   nom = nom.trim();

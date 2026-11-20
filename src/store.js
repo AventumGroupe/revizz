@@ -13,8 +13,12 @@ function read(key, fallback) {
     return memoire[key] ? JSON.parse(memoire[key]) : fallback;
   }
 }
+// Prévient la synchronisation quand le travail de l'élève change.
+const ecouteurs = [];
+export const surModification = (fn) => ecouteurs.push(fn);
 function write(key, value) {
   memoire[key] = JSON.stringify(value);
+  for (const fn of ecouteurs) fn(key);
   try {
     localStorage.setItem(key, memoire[key]);
   } catch (e) {
@@ -44,7 +48,17 @@ export function saveFiche(fiche) {
   else all.unshift(fiche);
   write(KEY_FICHES, all);
 }
-export const deleteFiche = (id) => write(KEY_FICHES, getFiches().filter((f) => f.id !== id));
+// Suppressions retenues (90 jours) pour qu'un élément effacé ne revienne pas d'un autre appareil.
+const KEY_SUPPRIMES = "revizz.supprimes";
+export function marquerSupprime(type, id) {
+  const s = read(KEY_SUPPRIMES, {});
+  s[`${type}:${id}`] = Date.now();
+  write(KEY_SUPPRIMES, s);
+}
+export function deleteFiche(id) {
+  write(KEY_FICHES, getFiches().filter((f) => f.id !== id));
+  marquerSupprime("fiche", id);
+}
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -112,6 +126,7 @@ const cle = (matiere, chapitre) => `${matiere}|${chapitre || "Sans chapitre"}`;
 export const getProgres = (matiere, chapitre) => read(KEY_PROGRES, {})[cle(matiere, chapitre)] || { finals: [] };
 export function saveProgres(matiere, chapitre, data) {
   const all = read(KEY_PROGRES, {});
+  data.maj = Date.now();
   all[cle(matiere, chapitre)] = data;
   write(KEY_PROGRES, all);
 }

@@ -5,7 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { lire, ecrire } from "./store.js";
 
 // Tout ce qui fait le travail de l'élève. Les secrets (clé API, code famille) ne sont jamais exportés.
-const CLES = ["revizz.fiches", "revizz.stats", "revizz.matieres", "revizz.progres", "revizz.controles"];
+export const CLES = ["revizz.fiches", "revizz.stats", "revizz.matieres", "revizz.matieresMaj", "revizz.progres", "revizz.controles", "revizz.supprimes"];
 const KEY_SETTINGS = "revizz.settings";
 const KEY_DERNIERE = "revizz.derniereSauvegarde";
 
@@ -55,8 +55,88 @@ export function lireSauvegarde(texte) {
   return s;
 }
 
-const activite = (p) => Math.max(p?.depart?.date || 0, ...(p?.finals || []).map((f) => f.date || 0));
+const dates = (p) => [p?.maj, p?.depart?.date, ...(p?.finals || []).map((f) => f.date)].filter(Boolean);
+const activite = (p) => (p ? Math.max(0, ...dates(p)) : 0);
 const fraicheur = (x) => x?.maj || x?.cree || 0;
+const QUATRE_VINGT_DIX_JOURS = 90 * 864e5;
+
+/**
+ * Fusionne deux jeux de données (cet appareil et un autre) sans rien perdre :
+ * pour une même fiche ou un même contrôle, la version la plus récente gagne ; ce qui a été supprimé
+ * après sa dernière modification reste supprimé. Fonction pure : ne touche pas au stockage.
+ */
+export function fusionDonnees(a = {}, b = {}) {
+  const bilan = { ajoutees: 0, majs: 0 };
+  const out = { ...a };
+  // Suppressions : on garde la plus récente, et on oublie celles de plus de 90 jours.
+  const sup = { ...(a["revizz.supprimes"] || {}) };
+  for (const [k, t] of Object.entries(b["revizz.supprimes"] || {})) if (!(sup[k] >= t)) sup[k] = t;
+  for (const k in sup) if (Date.now() - sup[k] > QUATRE_VINGT_DIX_JOURS) delete sup[k];
+  out["revizz.supprimes"] = sup;
+  const vivant = (type, x) => !(sup[`${type}:${x.id}`] >= fraicheur(x));
+
+  const parId = new Map((a["revizz.fiches"] || []).map((f) => [f.id, f]));
+  for (const f of b["revizz.fiches"] || []) {
+    const ici = parId.get(f.id);
+    if (!ici) {
+      parId.set(f.id, f);
+      if (vivant("fiche", f)) bilan.ajoutees++;
+    } else if (fraicheur(f) > fraicheur(ici)) {
+      parId.set(f.id, f);
+      bilan.majs++;
+    }
+  }
+  out["revizz.fiches"] = [...parId.values()].filter((f) => vivant("fiche", f)).sort((x, y) => (y.cree || 0) - (x.cree || 0));
+
+  const progres = { ...(a["revizz.progres"] || {}) };
+  for (const [k, p] of Object.entries(b["revizz.progres"] || {})) if (activite(p) > activite(progres[k])) progres[k] = p;
+  out["revizz.progres"] = progres;
+
+  // Matières : la liste modifiée le plus récemment gagne ; sans date, on ajoute celles qui manquent.
+  if (b["revizz.matieres"]) {
+    const ta = a["revizz.matieresMaj"] || 0, tb = b["revizz.matieresMaj"] || 0;
+    if (!a["revizz.matieres"] || tb > ta) {
+      out["revizz.matieres"] = b["revizz.matieres"];
+      out["revizz.matieresMaj"] = tb;
+    } else if (!ta && !tb) {
+      const liste = [...a["revizz.matieres"]];
+      for (const m of b["revizz.matieres"]) if (!liste.some((x) => x.nom === m.nom)) liste.push(m);
+      out["revizz.matieres"] = liste;
+    }
+  }
+
+  const ctrl = new Map((a["revizz.controles"] || []).map((c) => [c.id, c]));
+  for (const c of b["revizz.controles"] || []) if (!ctrl.has(c.id) || fraicheur(c) > fraicheur(ctrl.get(c.id))) ctrl.set(c.id, c);
+  out["revizz.controles"] = [...ctrl.values()].filter((c) => vivant("controle", c));
+
+  const st = a["revizz.stats"], st2 = b["revizz.stats"];
+  if (st2) {
+    const base = st || { serie: 0, dernierJour: null, cartesRevisees: 0, qcmFaits: 0 };
+    out["revizz.stats"] = {
+      serie: Math.max(base.serie || 0, st2.serie || 0),
+      dernierJour: [base.dernierJour, st2.dernierJour].filter(Boolean).sort().pop() || null,
+      cartesRevisees: Math.max(base.cartesRevisees || 0, st2.cartesRevisees || 0),
+      qcmFaits: Math.max(base.qcmFaits || 0, st2.qcmFaits || 0),
+    };
+  }
+  // Prénom et classe : repris s'ils ne sont pas encore renseignés ici.
+  const r1 = a[KEY_SETTINGS] || {}, r2 = b[KEY_SETTINGS] || {};
+  out[KEY_SETTINGS] = { prenom: r1.prenom || r2.prenom || "", classe: r1.prenom ? r1.classe : r2.classe || r1.classe, model: r1.model || r2.model };
+  return { donnees: out, bilan };
+}
+
+/** Données de cet appareil, au format des sauvegardes. */
+export function donneesLocales() {
+  return contenuSauvegarde().donnees;
+}
+
+/** Écrit des données fusionnées sur cet appareil (sans toucher aux réglages de connexion). */
+export function appliquerDonnees(d) {
+  for (const k of CLES) if (d[k] !== undefined) ecrire(k, d[k]);
+  const reg = lire(KEY_SETTINGS, {});
+  const r2 = d[KEY_SETTINGS] || {};
+  ecrire(KEY_SETTINGS, { ...reg, prenom: reg.prenom || r2.prenom || "", classe: reg.prenom ? reg.classe : r2.classe || reg.classe });
+}
 
 /**
  * Reprend une sauvegarde.
@@ -66,64 +146,18 @@ const fraicheur = (x) => x?.maj || x?.cree || 0;
  */
 export function reprendre(sauvegarde, mode) {
   const d = sauvegarde.donnees;
-  const bilan = { ajoutees: 0, majs: 0 };
   if (mode === "remplacer") {
     const vides = { "revizz.fiches": [], "revizz.progres": {}, "revizz.controles": [], "revizz.stats": { serie: 0, dernierJour: null, cartesRevisees: 0, qcmFaits: 0 } };
     for (const k of CLES) {
       if (d[k] !== undefined) ecrire(k, d[k]);
       else if (vides[k]) ecrire(k, vides[k]); // les matières restent celles de l'appareil si la sauvegarde n'en a pas
     }
-    bilan.ajoutees = (d["revizz.fiches"] || []).length;
-  } else {
-    // Fiches : par identifiant, la version la plus récente gagne.
-    const locales = lire("revizz.fiches", []);
-    const parId = new Map(locales.map((f) => [f.id, f]));
-    for (const f of d["revizz.fiches"] || []) {
-      const ici = parId.get(f.id);
-      if (!ici) {
-        parId.set(f.id, f);
-        bilan.ajoutees++;
-      } else if (fraicheur(f) > fraicheur(ici)) {
-        parId.set(f.id, f);
-        bilan.majs++;
-      }
-    }
-    ecrire("revizz.fiches", [...parId.values()].sort((a, b) => (b.cree || 0) - (a.cree || 0)));
-
-    // Progrès par chapitre : on garde celui qui a l'activité la plus récente.
-    const progres = lire("revizz.progres", {});
-    for (const [k, p] of Object.entries(d["revizz.progres"] || {})) if (activite(p) > activite(progres[k])) progres[k] = p;
-    ecrire("revizz.progres", progres);
-
-    // Matières : on ajoute celles qui manquent.
-    const mats = lire("revizz.matieres", null);
-    if (d["revizz.matieres"]) {
-      const liste = mats ?? [];
-      for (const m of d["revizz.matieres"]) if (!liste.some((x) => x.nom === m.nom)) liste.push(m);
-      ecrire("revizz.matieres", liste);
-    }
-
-    // Contrôles : par identifiant, le plus récent gagne.
-    const ctrl = new Map(lire("revizz.controles", []).map((c) => [c.id, c]));
-    for (const c of d["revizz.controles"] || []) if (!ctrl.has(c.id) || fraicheur(c) > fraicheur(ctrl.get(c.id))) ctrl.set(c.id, c);
-    ecrire("revizz.controles", [...ctrl.values()]);
-
-    // Série et compteurs : on garde le meilleur.
-    const st = lire("revizz.stats", null);
-    const st2 = d["revizz.stats"];
-    if (st2) {
-      const base = st || { serie: 0, dernierJour: null, cartesRevisees: 0, qcmFaits: 0 };
-      ecrire("revizz.stats", {
-        serie: Math.max(base.serie || 0, st2.serie || 0),
-        dernierJour: [base.dernierJour, st2.dernierJour].filter(Boolean).sort().pop() || null,
-        cartesRevisees: Math.max(base.cartesRevisees || 0, st2.cartesRevisees || 0),
-        qcmFaits: Math.max(base.qcmFaits || 0, st2.qcmFaits || 0),
-      });
-    }
+    const reg = lire(KEY_SETTINGS, {});
+    const r2 = d[KEY_SETTINGS] || {};
+    ecrire(KEY_SETTINGS, { ...reg, prenom: reg.prenom || r2.prenom || "", classe: reg.prenom ? reg.classe : r2.classe || reg.classe });
+    return { ajoutees: (d["revizz.fiches"] || []).length, majs: 0 };
   }
-  // Prénom et classe : repris s'ils ne sont pas encore renseignés ici.
-  const reg = lire(KEY_SETTINGS, {});
-  const r2 = d[KEY_SETTINGS] || {};
-  ecrire(KEY_SETTINGS, { ...reg, prenom: reg.prenom || r2.prenom || "", classe: reg.prenom ? reg.classe : r2.classe || reg.classe });
+  const { donnees, bilan } = fusionDonnees(donneesLocales(), d);
+  appliquerDonnees(donnees);
   return bilan;
 }

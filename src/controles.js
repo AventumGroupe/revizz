@@ -1,7 +1,7 @@
 // Mode « J'ai un contrôle » : planning de révision jour par jour + rappels sur le téléphone.
 // Le planning est calculé sur l'appareil : aucun appel à Claude.
 import { Capacitor } from "@capacitor/core";
-import { lire, ecrire, getFiches, uid, getSettings } from "./store.js";
+import { lire, ecrire, getFiches, uid, getSettings, marquerSupprime } from "./store.js";
 import { etatPaliers } from "./paliers.js";
 
 const KEY = "revizz.controles";
@@ -40,6 +40,7 @@ export async function supprimerControlesDemo() {
 export async function supprimerControle(id) {
   await annulerRappels(getControle(id));
   ecrire(KEY, getControles().filter((c) => c.id !== id));
+  marquerSupprime("controle", id);
 }
 export function nouveauControle({ matiere, date, chapitres, titre }) {
   return saveControle({ id: uid(), matiere, date, chapitres, titre: titre || "", cree: Date.now(), faits: {}, note: null, demo: getSettings().demo || undefined });

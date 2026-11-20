@@ -7,6 +7,7 @@ import * as ai from "./claude.js";
 import { ficheDeDepart, questionsDepartDemo } from "./demo.js";
 import { ouvrirScanner } from "./scanner.js";
 import * as sauvegarde from "./sauvegarde.js";
+import * as synchro from "./synchro.js";
 import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
@@ -239,6 +240,11 @@ function ligneMatiere(m, fiches) {
 }
 function rappelSauvegarde(fiches) {
   if (DEMO_ONLY || store.getSettings().demo || fiches.length < 2) return "";
+  if (synchro.active()) {
+    const e = synchro.etat();
+    if (!e.erreur || /Hors ligne/.test(e.erreur)) return "";
+    return `<div class="bandeau">${ic("actualiser", 18)}<span><b>Synchronisation en échec.</b> ${esc(e.erreur)}</span><button class="lien" data-go="settings">Voir</button></div>`;
+  }
   const der = sauvegarde.derniereSauvegarde();
   if (der && Date.now() - der < 7 * 864e5) return "";
   return `<div class="bandeau">${ic("envoyer", 18)}<span><b>${der ? `Dernière sauvegarde ${ilYa(der)}` : "Aucune sauvegarde"}.</b> Mets tes fiches à l'abri sur Drive.</span><button class="lien" data-go="settings">Sauvegarder</button></div>`;
@@ -1485,8 +1491,23 @@ const ilYa = (t) => {
 function sauvegardeHTML() {
   const der = sauvegarde.derniereSauvegarde();
   const natif = Capacitor.isNativePlatform();
-  return `<div class="card" id="carte-sauvegarde">
-    <h3>Sauvegarde et synchronisation</h3>
+  const sy = store.getSettings();
+  const e = synchro.etat();
+  const blocSynchro = synchro.disponible(sy)
+    ? `<label class="interrupteur"><input type="checkbox" id="synchro-auto" ${sy.synchro !== false ? "checked" : ""}><span><b>Synchronisation automatique</b><small>Le téléphone et le site web partagent les mêmes fiches, par ton site Révizz et le code famille.</small></span></label>
+      ${
+        sy.synchro !== false
+          ? `<p class="${e.erreur ? "alerte" : "hint"}" id="etat-synchro">${e.erreur ? esc(e.erreur) : e.date ? `Synchronisé ${ilYa(e.date)}` : "Pas encore synchronisé"}</p>
+             <button class="btn secondary big-btn" id="btn-synchro">${ic("actualiser", 18)} Synchroniser maintenant</button>`
+          : ""
+      }`
+    : `<p class="hint">Synchronisation automatique : disponible avec la connexion « Code famille » (site Révizz sur Netlify).</p>`;
+  return `<div class="card" id="carte-synchro">
+    <h3>Synchronisation</h3>
+    ${blocSynchro}
+  </div>
+  <div class="card" id="carte-sauvegarde">
+    <h3>Sauvegarde dans un fichier</h3>
     <p class="${der && Date.now() - der < 7 * 864e5 ? "hint" : "alerte"}">Dernière sauvegarde : <b>${der ? ilYa(der) : "jamais"}</b></p>
     <button class="btn primary big-btn" id="btn-sauver">${ic(natif ? "envoyer" : "telecharger", 18)} ${natif ? "Sauvegarder vers Drive" : "Télécharger une sauvegarde"}</button>
     <button class="btn secondary big-btn" id="btn-reprendre">${ic("actualiser", 18)} Reprendre une sauvegarde</button>
@@ -1502,6 +1523,25 @@ function sauvegardeHTML() {
 }
 function bindSauvegarde() {
   const $ = (id) => document.getElementById(id);
+  if ($("synchro-auto"))
+    $("synchro-auto").onchange = (ev) => {
+      synchro.activer(ev.target.checked);
+      if (ev.target.checked) synchro.synchroniser().catch(() => {}).finally(render);
+      render();
+    };
+  if ($("btn-synchro"))
+    $("btn-synchro").onclick = async (ev) => {
+      ev.target.disabled = true;
+      $("etat-synchro").textContent = "Synchronisation…";
+      try {
+        const r = await synchro.synchroniser();
+        const n = (r?.bilan?.ajoutees || 0) + (r?.bilan?.majs || 0);
+        toast(n ? `${n} fiche${n > 1 ? "s" : ""} reçue${n > 1 ? "s" : ""} de l'autre appareil` : "Tout est à jour");
+      } catch (err) {
+        toast(err.message);
+      }
+      render();
+    };
   if (!$("btn-sauver")) return;
   $("btn-sauver").onclick = async () => {
     try {
@@ -1601,6 +1641,7 @@ afterRender.settings = () => {
     const pret = ai.estConfigure({ ...s, demo: false });
     if (!pret && !s.demo) return toast(s.connexion === "cle" ? "Il faut une clé API pour utiliser Révizz." : "Il faut l'adresse du site et le code famille.");
     if (pret && s.demo && !DEMO_ONLY) quitterDemo();
+    if (synchro.active()) synchro.synchroniser().catch(() => {});
     toast("Enregistré");
     go({ view: "home" });
   };
@@ -2445,3 +2486,13 @@ app.addEventListener("click", (e) => {
 });
 
 render();
+// Synchronisation automatique : quand des fiches arrivent d'un autre appareil, on rafraîchit l'écran
+// (sauf pendant que l'élève écrit, pour ne pas lui faire perdre sa saisie).
+if (!DEMO_ONLY)
+  synchro.demarrer((bilan) => {
+    const el = document.activeElement;
+    if (el && /^(TEXTAREA|INPUT|SELECT)$/.test(el.tagName)) return;
+    render();
+    const n = (bilan?.ajoutees || 0) + (bilan?.majs || 0);
+    if (n) toast(`${n} fiche${n > 1 ? "s" : ""} mise${n > 1 ? "s" : ""} à jour depuis l'autre appareil`);
+  });
