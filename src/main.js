@@ -11,6 +11,7 @@ import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
 import { preparerPage, changerType } from "./image.js";
+import { etatPaliers, fichesDuChapitre, SEUILS } from "./paliers.js";
 
 // Version « maquette » publiée en page web : uniquement le mode démo.
 const DEMO_ONLY = import.meta.env.VITE_DEMO_ONLY === "1";
@@ -76,9 +77,10 @@ function back() {
   const scanner = document.querySelector(".scanner [data-a=fermer]");
   if (scanner) return scanner.click();
   if (ui.view === "fiche" || ui.view === "scan" || ui.view === "revision") go({ view: ui.retour });
-  else if (ui.view === "chapitre") go({ view: "matiere" });
+  else if (ui.view === "chapitre") go({ view: ui.retourChapitre || "matiere" });
   else if (ui.view === "controle") go({ view: ui.retourControle || "home" });
   else if (ui.view === "test") go({ view: "chapitre" });
+  else if (ui.view === "exos" || ui.view === "defi") go({ view: ui.retourPalier || "chapitre" });
   else if (ui.view === "matiere") go({ view: "matieres" });
   else if (ui.view === "settings" || ui.view === "matieres" || ui.view === "planning") go({ view: "home", matiere: null });
 }
@@ -123,7 +125,7 @@ function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
   if (!ai.estConfigure(s) && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, matieres, planning, relecture: relectureView, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
+  const views = { welcome, home, matieres, planning, relecture: relectureView, exos: exosView, defi: defiView, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
   const avecNav = VUES_RACINE.includes(ui.view) && ui.view !== "welcome";
   document.body.classList.toggle("avec-nav", avecNav);
   app.innerHTML = views[ui.view]() + (avecNav ? barreNav() : "");
@@ -1026,13 +1028,16 @@ function bindSession(s, onEnd) {
 let sessionJour = null;
 function revision() {
   if (!sessionJour) {
-    const cartes = store
+    const fiches = store
       .getFiches()
       .filter((f) => !ui.revMatiere || f.matiere === ui.revMatiere)
-      .flatMap((f) => store.cartesDues(f).map((c) => ({ ...c, ficheId: f.id })));
+      .filter((f) => !ui.revChapitre || (f.chapitre || "Sans chapitre") === ui.revChapitre);
+    let cartes = fiches.flatMap((f) => store.cartesDues(f).map((c) => ({ ...c, ficheId: f.id })));
+    // Révision d'un chapitre (palier 1) : s'il n'y a rien à revoir, on passe toutes ses cartes.
+    if (!cartes.length && ui.revChapitre) cartes = fiches.flatMap((f) => f.flashcards.map((c) => ({ ...c, ficheId: f.id })));
     sessionJour = { cartes: shuffle(cartes).slice(0, 40), i: 0, retourne: false, sues: 0 };
   }
-  return `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title">${ui.revMatiere ? `<small>${pastille(ui.revMatiere, "s")} ${esc(ui.revMatiere)}</small>` : ""}Révision du jour</div><span></span></header>
+  return `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title">${ui.revMatiere ? `<small>${pastille(ui.revMatiere, "s")} ${esc(ui.revMatiere)}</small>` : ""}${ui.revChapitre ? esc(ui.revChapitre) : "Révision du jour"}</div><span></span></header>
   ${sessionCartes(null, sessionJour)}`;
 }
 afterRender.revision = () =>
@@ -1519,7 +1524,6 @@ async function demanderRetrait(nom) {
 }
 
 // ---------- Progrès d'un chapitre : test de départ → révisions → test final ----------
-const fichesDuChapitre = (m, c) => store.getFiches().filter((f) => f.matiere === m && (f.chapitre || "Sans chapitre") === c);
 // Toutes les fiches du chapitre réunies, pour générer un test sur l'ensemble du chapitre.
 function ficheChapitre(m, c) {
   const fiches = fichesDuChapitre(m, c);
@@ -1547,6 +1551,7 @@ function pointsDuChapitre(m, c) {
   const pts = [];
   if (p.depart) pts.push({ date: p.depart.date, note: noteDe(p.depart), type: "depart" });
   for (const q of fichesDuChapitre(m, c).flatMap((f) => f.qcm || [])) pts.push({ date: q.date, note: noteDe(q), type: "qcm" });
+  for (const q of p.qcmsChap || []) pts.push({ date: q.date, note: noteDe(q), type: "qcm" });
   for (const f of p.finals || []) pts.push({ date: f.date, note: noteDe(f), type: "final" });
   pts.sort((a, b) => a.date - b.date);
   let k = 0;
@@ -1618,9 +1623,12 @@ function chapitreView() {
   return `
   <header class="top" style="--c:${couleur(m)}">
     <button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button>
-    <div class="title"><small>${pastille(m, "s")} ${esc(m)} · Mes progrès</small>${esc(c)}</div>
+    <div class="title"><small>${pastille(m, "s")} ${esc(m)} · Parcours</small>${esc(c)}</div>
     <span></span>
   </header>
+  ${parcoursHTML(m, c)}
+  ${ressourcesHTML(m, c)}
+  <h2 class="titre-section">Mesurer mes progrès</h2>
   ${
     !p.depart
       ? `<div class="card">
@@ -1644,6 +1652,212 @@ function chapitreView() {
   <h3 class="chapitre">Fiches du chapitre</h3>
   <div class="liste-lignes">${fiches.map((f) => carteFiche(f)).join("")}</div>`;
 }
+
+// ---------- Parcours en 3 paliers ----------
+function parcoursHTML(m, c) {
+  const e = etatPaliers(m, c);
+  const etape = (n, titre, sous, valide, detail, boutons) => {
+    const etat = valide ? "valide" : e.actuel === n ? "actuel" : "a-venir";
+    return `<div class="palier ${etat}">
+      <div class="palier-num">${valide ? ic("ok", 16) : n}</div>
+      <div class="palier-corps">
+        <b>${titre}</b><small>${sous}</small>
+        <p class="palier-detail">${detail}</p>
+        ${etat !== "a-venir" || valide ? `<div class="palier-actions">${boutons}</div>` : ""}
+      </div>
+    </div>`;
+  };
+  return `<section class="parcours">
+    ${etape(1, "Je sais", "Connaître le cours", e.p1,
+      `Cartes sues : <b>${e.connues} %</b> (objectif ${SEUILS.cartesConnues} %) · Meilleur QCM : <b>${e.meilleur ?? "—"}/20</b> (objectif ${SEUILS.noteQcm})`,
+      `<button class="btn secondary" data-palier="1cartes">${ic("cartes", 16)} Cartes</button><button class="btn secondary" data-palier="1qcm">${ic("qcm", 16)} QCM du chapitre</button>`)}
+    ${etape(2, "Je sais faire", "Appliquer avec méthode", e.p2,
+      `Exercices réussis : <b>${Math.min(e.reussis, SEUILS.exercices)}/${SEUILS.exercices}</b>, avec coups de pouce et correction pas à pas`,
+      `<button class="btn ${e.actuel === 2 ? "primary" : "secondary"}" data-palier="2">${ic("copie", 16)} Exercices d'application</button>`)}
+    ${etape(3, "Je vais plus loin", "Réfléchir dans une situation nouvelle", e.p3,
+      e.p3 ? `Défi réussi${e.note3 !== null ? ` : <b>${e.note3}/20</b>` : ""}` : "Un défi qui mobilise tout le chapitre, évalué par Claude",
+      `<button class="btn ${e.actuel === 3 ? "primary" : "secondary"}" data-palier="3">${ic("medaille", 16)} Défi</button>`)}
+    ${e.actuel === 4 ? `<p class="parcours-fin">${ic("trophee", 18)} Chapitre maîtrisé : les trois paliers sont validés.</p>` : ""}
+    <div id="progress"></div>
+  </section>`;
+}
+// Ressources publiques gratuites, ouvertes dans le navigateur.
+function ressourcesHTML(m, c) {
+  const q = encodeURIComponent(c === "Sans chapitre" ? m : c);
+  const liens = [[`https://www.lumni.fr/recherche?query=${q}`, "Lumni", "Vidéos et quiz gratuits de l'audiovisuel public"]];
+  if (m === "Mathématiques") liens.push(["https://coopmaths.fr/alea/", "MathALÉA", "Exercices de maths corrigés, à volonté"]);
+  return `<details class="card ressources"><summary>${ic("lien", 16)} Pour réviser autrement</summary>
+    ${liens.map(([url, nom, desc]) => `<a class="ligne" href="${url}" target="_blank" rel="noopener"><span class="ligne-txt"><b>${nom}</b><small>${desc}</small></span>${ic("suite", 18, "chevron")}</a>`).join("")}
+  </details>`;
+}
+
+// --- Palier 2 : exercices d'application
+function exosView() {
+  const m = ui.matiere, c = ui.chapitre;
+  const p = store.getProgres(m, c);
+  const e = etatPaliers(m, c);
+  const exos = p.p2?.exos || [];
+  const head = `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title"><small>${pastille(m, "s")} ${esc(c)}</small>Je sais faire</div><span class="icon-place"></span></header>`;
+  if (!exos.length)
+    return `${head}<section class="vide-etat"><h2>Exercices d'application</h2><p>3 exercices comme en classe, de difficulté croissante. Pour chacun : 3 coups de pouce si tu bloques, puis la correction pas à pas.</p>
+      <button class="btn primary big-btn" id="gen-exos">Préparer mes exercices</button><div id="progress"></div></section>`;
+  return `${head}
+  <div class="resume-palier"><b>${Math.min(e.reussis, SEUILS.exercices)}/${SEUILS.exercices}</b> exercices réussis${e.p2 ? " · palier 2 validé" : ""}</div>
+  ${exos
+    .map((x, i) => {
+      const st = p.p2.etat[i] || {};
+      const finis = st.resultat;
+      return `<article class="card exo ${finis ? `exo-${finis}` : ""}">
+        <div class="exo-tete"><span class="tag-comp">${esc(x.competence)}</span>${finis === "reussi" ? `<span class="tag-ok">${ic("ok", 14)} Réussi</span>` : finis === "rate" ? `<span class="tag-ko">À retravailler</span>` : ""}</div>
+        <h3>${i + 1}. ${esc(x.titre)}</h3>
+        <div class="md">${md(x.enonce)}</div>
+        <textarea data-brouillon="${i}" rows="3" placeholder="Ta réponse ou ton brouillon">${esc(st.brouillon || "")}</textarea>
+        ${(x.indices || []).slice(0, st.indices || 0).map((ind, k) => `<p class="indice">${ic("astuce", 16)} <span><b>Coup de pouce ${k + 1}</b> ${esc(ind)}</span></p>`).join("")}
+        ${(x.etapes || []).slice(0, st.etapes || 0).map((et, k) => `<div class="etape"><b>Étape ${k + 1} · ${esc(et.titre)}</b><div class="md">${md(et.explication)}</div></div>`).join("")}
+        ${st.etapes >= (x.etapes || []).length ? `<p class="reponse">${ic("fait", 16)} <span><b>Réponse :</b> ${esc(x.reponse)}</span></p>` : ""}
+        <div class="exo-actions">
+          ${!st.etapes && (st.indices || 0) < 3 ? `<button class="btn secondary" data-indice="${i}">${ic("astuce", 16)} Coup de pouce (${(st.indices || 0) + 1}/3)</button>` : ""}
+          ${(st.etapes || 0) < (x.etapes || []).length ? `<button class="btn secondary" data-etape="${i}">${st.etapes ? "Étape suivante" : "Correction pas à pas"}</button>` : ""}
+          ${st.etapes >= (x.etapes || []).length && !finis ? `<button class="btn good" data-resultat="${i}:reussi">${ic("ok", 16)} J'ai réussi</button><button class="btn secondary" data-resultat="${i}:rate">Pas encore</button>` : ""}
+        </div>
+        ${st.etapes >= (x.etapes || []).length && !finis && (st.indices || 0) >= 3 ? `<p class="hint">Avec les 3 coups de pouce, l'exercice ne compte pas pour le palier : refais-en un autre seul.</p>` : ""}
+      </article>`;
+    })
+    .join("")}
+  <button class="btn ghost big-btn" id="gen-exos">${ic("actualiser", 16)} Nouveaux exercices</button>
+  <div id="progress"></div>`;
+}
+afterRender.exos = () => {
+  const m = ui.matiere, c = ui.chapitre;
+  const lire = () => store.getProgres(m, c);
+  const ecrire = (p) => store.saveProgres(m, c, p);
+  const $ = (id) => document.getElementById(id);
+  if ($("gen-exos"))
+    $("gen-exos").onclick = async (e) => {
+      e.target.disabled = true;
+      const pr = progressUI($("progress"), "Claude prépare tes exercices…");
+      try {
+        const exos = await ai.genererExercices(ficheChapitre(m, c), pr.update);
+        const p = lire();
+        p.p2 = { ...(p.p2 || {}), exos, etat: exos.map(() => ({})), reussis: p.p2?.reussis || 0 };
+        ecrire(p);
+        render();
+      } catch (err) {
+        $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+        e.target.disabled = false;
+      } finally {
+        pr.stop();
+      }
+    };
+  const maj = (i, f) => {
+    const p = lire();
+    p.p2.etat[i] = f({ ...(p.p2.etat[i] || {}) }, p);
+    ecrire(p);
+  };
+  document.querySelectorAll("[data-brouillon]").forEach((t) => (t.onchange = () => maj(+t.dataset.brouillon, (st) => ({ ...st, brouillon: t.value }))));
+  document.querySelectorAll("[data-indice]").forEach((b) => (b.onclick = () => (maj(+b.dataset.indice, (st) => ({ ...st, indices: Math.min(3, (st.indices || 0) + 1) })), render())));
+  document.querySelectorAll("[data-etape]").forEach((b) => (b.onclick = () => (maj(+b.dataset.etape, (st) => ({ ...st, etapes: (st.etapes || 0) + 1 })), render())));
+  document.querySelectorAll("[data-resultat]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        const [i, res] = b.dataset.resultat.split(":");
+        const p = lire();
+        const st = p.p2.etat[+i] || {};
+        st.resultat = res;
+        // Réussi sans le 3e coup de pouce : compte pour le palier.
+        if (res === "reussi" && (st.indices || 0) < 3) p.p2.reussis = (p.p2.reussis || 0) + 1;
+        p.p2.etat[+i] = st;
+        ecrire(p);
+        store.enregistrerActivite("qcm");
+        if (etatPaliers(m, c).p2 && res === "reussi") toast("Palier 2 validé : place au défi !");
+        render();
+      })
+  );
+};
+
+// --- Palier 3 : défi
+function defiView() {
+  const m = ui.matiere, c = ui.chapitre;
+  const p = store.getProgres(m, c);
+  const d = p.p3?.defi;
+  const ev = p.p3?.evaluation;
+  const head = `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title"><small>${pastille(m, "s")} ${esc(c)}</small>Je vais plus loin</div><span class="icon-place"></span></header>`;
+  if (!d)
+    return `${head}<section class="vide-etat"><h2>Le défi du chapitre</h2><p>Une situation nouvelle, qui oblige à réfléchir avec tout ce que tu as appris. Compte 20 à 30 minutes. Claude lit ta réponse et te dit si ton raisonnement tient.</p>
+      <button class="btn primary big-btn" id="gen-defi">Voir mon défi</button><div id="progress"></div></section>`;
+  return `${head}
+  <article class="card">
+    <h2>${esc(d.titre)}</h2>
+    <div class="md">${md(d.situation)}</div>
+    <p class="consigne">${ic("fleche", 16)} <b>${esc(d.consigne)}</b></p>
+    <h3>Ce qui sera évalué</h3>
+    <ul class="keys">${(d.criteres || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    <details><summary>Besoin d'une piste ?</summary><ul class="keys">${(d.pistes || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></details>
+  </article>
+  <h3>Ma réponse</h3>
+  <textarea id="defi-rep" rows="9" placeholder="Explique ton raisonnement : c'est lui qui compte.">${esc(p.p3.reponse || "")}</textarea>
+  <button class="btn primary big-btn" id="defi-eval">${ic("copie", 18)} Faire évaluer ma réponse</button>
+  <div id="progress"></div>
+  ${
+    ev
+      ? `<div class="card eval ${ev.valide ? "eval-ok" : "eval-ko"}">
+          <div class="eval-tete"><b class="big-num">${ev.note}/20</b><span>${ev.valide ? `${ic("ok", 16)} Défi réussi · palier 3 validé` : "Pas encore validé"}</span></div>
+          ${ev.points_forts?.length ? `<h3>Points forts</h3><ul class="keys">${ev.points_forts.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+          ${ev.a_ameliorer?.length ? `<h3>À améliorer</h3><ul class="keys">${ev.a_ameliorer.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+          <p class="astuce">${ic("astuce", 18)} <span>${esc(ev.conseil)}</span></p>
+        </div>
+        <details class="card"><summary>Voir le corrigé</summary><div class="md">${md(d.corrige)}</div></details>`
+      : ""
+  }
+  <button class="btn ghost big-btn" id="gen-defi">${ic("actualiser", 16)} Un autre défi</button>`;
+}
+afterRender.defi = () => {
+  const m = ui.matiere, c = ui.chapitre;
+  const $ = (id) => document.getElementById(id);
+  $("gen-defi").onclick = async (e) => {
+    e.target.disabled = true;
+    const zone = $("progress");
+    const pr = progressUI(zone, "Claude prépare ton défi…");
+    try {
+      const defi = await ai.genererDefi(ficheChapitre(m, c), pr.update);
+      const p = store.getProgres(m, c);
+      p.p3 = { ...(p.p3 || {}), defi, reponse: "", evaluation: null, valide: p.p3?.valide || false };
+      store.saveProgres(m, c, p);
+      render();
+    } catch (err) {
+      zone.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      e.target.disabled = false;
+    } finally {
+      pr.stop();
+    }
+  };
+  if (!$("defi-rep")) return;
+  $("defi-rep").onchange = () => {
+    const p = store.getProgres(m, c);
+    p.p3.reponse = $("defi-rep").value;
+    store.saveProgres(m, c, p);
+  };
+  $("defi-eval").onclick = async (e) => {
+    const reponse = $("defi-rep").value.trim();
+    if (reponse.split(/\s+/).length < 8) return toast("Développe un peu plus ta réponse");
+    e.target.disabled = true;
+    const pr = progressUI($("progress"), "Claude lit ta réponse…");
+    try {
+      const p = store.getProgres(m, c);
+      const evaluation = await ai.evaluerDefi(ficheChapitre(m, c), p.p3.defi, reponse, pr.update);
+      p.p3 = { ...p.p3, reponse, evaluation, valide: p.p3.valide || !!evaluation.valide, essais: (p.p3.essais || 0) + 1 };
+      store.saveProgres(m, c, p);
+      store.enregistrerActivite("qcm");
+      if (evaluation.valide) toast("Palier 3 validé !");
+      render();
+    } catch (err) {
+      $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      e.target.disabled = false;
+    } finally {
+      pr.stop();
+    }
+  };
+};
 
 let test = null; // { type, questions, i, choisi, score, erreurs, fini }
 async function lancerTest(type) {
@@ -1677,7 +1891,7 @@ function testView() {
     ui.view = "chapitre";
     return chapitreView();
   }
-  const titre = test.type === "depart" ? "Test de départ" : "Test final";
+  const titre = test.type === "depart" ? "Test de départ" : test.type === "palier1" ? "QCM du chapitre" : "Test final";
   const head = `<header class="top" style="--c:${couleur(ui.matiere)}"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title"><small>${esc(ui.chapitre)}</small>${titre}</div><span></span></header>`;
   if (test.i >= test.questions.length) {
     const note = store.sur20(test.score, test.questions.length);
@@ -1685,13 +1899,15 @@ function testView() {
     const comparaison =
       test.type === "final" && p.depart
         ? `<div class="compare"><span>Avant <b>${noteDe(p.depart)}/20</b></span><span class="aa-fleche">→</span><span>Maintenant <b>${note}/20</b></span></div>`
-        : `<p class="sub">C'est ton point de départ. Révise les fiches et les cartes du chapitre, puis fais le test final !</p>`;
+        : test.type === "palier1"
+          ? `<p class="sub">${note >= SEUILS.noteQcm ? (etatPaliers(ui.matiere, ui.chapitre).p1 ? "Palier 1 validé : passe aux exercices d'application !" : `Bravo ! Pour valider le palier 1, révise aussi les cartes (${SEUILS.cartesConnues} % à connaître).`) : `Il faut ${SEUILS.noteQcm}/20 pour valider le palier 1 : relis la fiche et retente.`}</p>`
+          : `<p class="sub">C'est ton point de départ. Révise les fiches et les cartes du chapitre, puis fais le test final !</p>`;
     return `${head}<div class="card center done">
-      <div class="big-num">${humeur(note)} ${note}/20</div>
+      <div class="big-num">${note}/20</div><p class="sub">${humeur(note)}</p>
       <p>${test.score} bonne${test.score > 1 ? "s" : ""} réponse${test.score > 1 ? "s" : ""} sur ${test.questions.length}</p>
       ${comparaison}
       ${test.erreurs.length ? `<h3>À revoir</h3><ul class="keys">${test.erreurs.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
-      <button class="btn primary big-btn" id="test-voir">${ic("progres", 18)} Voir mes progrès</button>
+      <button class="btn primary big-btn" id="test-voir">${ic("progres", 18)} ${test.type === "palier1" ? "Voir mon parcours" : "Voir mes progrès"}</button>
     </div>`;
   }
   const q = test.questions[test.i];
@@ -1735,6 +1951,7 @@ afterRender.test = () => {
         const p = store.getProgres(ui.matiere, ui.chapitre);
         const resultat = { date: Date.now(), score: test.score, total: test.questions.length };
         if (test.type === "depart") p.depart = { ...resultat, questions: test.questions };
+        else if (test.type === "palier1") p.qcmsChap = [...(p.qcmsChap || []), resultat];
         else p.finals = [...(p.finals || []), resultat];
         store.saveProgres(ui.matiere, ui.chapitre, p);
         store.enregistrerActivite("qcm");
@@ -1760,7 +1977,7 @@ const compteARebours = (c) => {
   const r = ctrl.joursRestants(c);
   return r === 0 ? "Aujourd'hui" : r === 1 ? "Demain" : `Dans ${r} jours`;
 };
-const ICONE_TACHE = { relire: "resume", qcm: "qcm", sujet: "sujet", cartes: "cartes", points: "resume", test: "final" };
+const ICONE_TACHE = { relire: "resume", qcm: "qcm", sujet: "sujet", cartes: "cartes", points: "resume", test: "final", p1qcm: "qcm", exos: "copie", defi: "medaille" };
 
 // Sur l'accueil : les contrôles à venir, avec l'avancement du jour.
 function controlesAccueil() {
@@ -1914,6 +2131,8 @@ function ouvrirAjoutTache(c, date) {
   const fiches = ctrl.fichesDuControle(c);
   const types = [
     ["qcm", "QCM"],
+    ["exos", "Exercices d'application"],
+    ["defi", "Défi"],
     ["sujet", "Sujet blanc"],
     ["relire", "Relire une fiche"],
     ["cartes", "Cartes"],
@@ -1983,6 +2202,11 @@ function controleView() {
       <span class="jauge"><i style="width:${total ? Math.round((faites / total) * 100) : 0}%;background:${couleur(c.matiere)}"></i></span>
     </div>
   </div>
+  <div class="liste-lignes paliers-ctrl">${ctrl.chapitresDu(c).map((ch) => {
+    const e = etatPaliers(c.matiere, ch);
+    const puce = (n, ok) => `<span class="puce ${ok ? "ok" : e.actuel === n ? "cours" : ""}">${ok ? ic("ok", 12) : n}</span>`;
+    return `<button class="ligne" data-chapitre="${esc(ch)}" data-m="${esc(c.matiere)}"><span class="ligne-txt"><b>${esc(ch)}</b><small>${e.actuel === 4 ? "Les 3 paliers sont validés" : `Palier ${e.actuel} en cours`}</small></span><span class="puces">${puce(1, e.p1)}${puce(2, e.p2)}${puce(3, e.p3)}</span></button>`;
+  }).join("")}</div>
   <button class="btn secondary big-btn" id="ctrl-modifier">${ic("calendrier", 18)} Changer la date ou les chapitres</button>
   ${Capacitor.isNativePlatform() ? `<p class="hint center">${ic("rappel", 14)} Rappel chaque jour vers 18 h</p>` : ""}
   ${plan
@@ -2054,16 +2278,29 @@ afterRender.controle = () => {
           go({ view: "fiche", ficheId: a.ficheId, tab: a.tab, retour: "controle" });
         } else if (a.vue === "revision") {
           sessionJour = null;
-          go({ view: "revision", revMatiere: c.matiere, retour: "controle" });
+          go({ view: "revision", revMatiere: c.matiere, revChapitre: null, retour: "controle" });
         } else if (a.vue === "chapitre") go({ view: "chapitre", matiere: c.matiere, chapitre: a.chapitre });
+        else if (a.vue === "palier") ouvrirPalier(String(a.palier), c.matiere, a.chapitre, "controle");
         else go({ view: "matiere", matiere: c.matiere });
       })
   );
 };
 
+// Ouvre une étape du parcours (depuis le chapitre ou depuis une tâche du planning).
+function ouvrirPalier(quoi, matiere, chapitre, retour) {
+  ui.matiere = matiere;
+  ui.chapitre = chapitre;
+  if (quoi === "1cartes") {
+    sessionJour = null;
+    go({ view: "revision", revMatiere: matiere, revChapitre: chapitre, retour: "chapitre" });
+  } else if (quoi === "1qcm") lancerTest("palier1");
+  else if (quoi === "1") go({ view: "chapitre", retourChapitre: retour === "controle" ? "controle" : ui.retourChapitre });
+  else go({ view: quoi === "2" ? "exos" : "defi", retourPalier: retour });
+}
+
 // ---------- Clics globaux ----------
 app.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage],[data-ajout-matiere],[data-retirer],[data-chapitre],[data-test],[data-nouveau-controle],[data-controle]");
+  const t = e.target.closest("[data-go],[data-back],[data-open],[data-tab],[data-matiere],[data-scan],[data-revision],[data-delpage],[data-ajout-matiere],[data-retirer],[data-chapitre],[data-test],[data-nouveau-controle],[data-controle],[data-palier]");
   if (!t) return;
   // D'où vient-on ? (pour que « ← » ramène à la matière ou à l'accueil)
   const origine = ["matiere", "matieres", "planning", "chapitre"].includes(ui.view) ? ui.view : "home";
@@ -2077,8 +2314,9 @@ app.addEventListener("click", (e) => {
   else if (t.dataset.matiere) go({ view: "matiere", matiere: t.dataset.matiere });
   else if (t.dataset.ajoutMatiere !== undefined) ouvrirAjoutMatiere();
   else if (t.dataset.retirer) demanderRetrait(t.dataset.retirer);
-  else if (t.dataset.chapitre) go({ view: "chapitre", chapitre: t.dataset.chapitre, matiere: t.dataset.m || ui.matiere });
+  else if (t.dataset.chapitre) go({ view: "chapitre", chapitre: t.dataset.chapitre, matiere: t.dataset.m || ui.matiere, retourChapitre: ui.view === "controle" ? "controle" : "matiere" });
   else if (t.dataset.test) lancerTest(t.dataset.test);
+  else if (t.dataset.palier) ouvrirPalier(t.dataset.palier, ui.matiere, ui.chapitre, "chapitre");
   else if (t.dataset.nouveauControle !== undefined) ouvrirNouveauControle(t.dataset.nouveauControle || ui.matiere || "");
   else if (t.dataset.controle) go({ view: "controle", controleId: t.dataset.controle, retourControle: origine });
   else if (t.dataset.scan !== undefined) {
@@ -2086,7 +2324,7 @@ app.addEventListener("click", (e) => {
     go({ view: "scan", retour: origine });
   } else if (t.dataset.revision !== undefined) {
     sessionJour = null;
-    go({ view: "revision", revMatiere: t.dataset.revision || null, retour: origine });
+    go({ view: "revision", revMatiere: t.dataset.revision || null, revChapitre: null, retour: origine });
   }
   else if (t.dataset.delpage !== undefined) {
     pages.splice(+t.dataset.delpage, 1);

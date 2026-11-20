@@ -403,6 +403,44 @@ export async function miniFiche(fiche, connexe, onProgress) {
   return simuler(texte, onProgress, 1500);
 }
 
+// ---------- Paliers 2 et 3 en démo ----------
+const EXOS = {
+  histoire: [
+    { titre: "Situer les grandes dates", competence: "Se repérer dans le temps", enonce: "Classe dans l'ordre chronologique : abolition des privilèges, proclamation de la République, prise de la Bastille, exécution de Louis XVI. Donne la date de chacun.", indices: ["Commence par l'événement de l'été 1789 que l'on fête le 14 juillet.", "Deux événements ont lieu en 1789, un en 1792, un en 1793.", "14 juillet 1789 → 4 août 1789 → …"], etapes: [{ titre: "Les événements de 1789", explication: "**14 juillet 1789** : prise de la Bastille ; **4 août 1789** : abolition des privilèges." }, { titre: "La fin de la monarchie", explication: "**21 septembre 1792** : abolition de la royauté, puis **21 janvier 1793** : exécution de Louis XVI." }], reponse: "Bastille (14/07/1789) → privilèges (04/08/1789) → République (21/09/1792) → exécution (21/01/1793)" },
+    { titre: "Analyser l'article 1 de la DDHC", competence: "Analyser un document", enonce: "> « Les hommes naissent et demeurent libres et égaux en droits. Les distinctions sociales ne peuvent être fondées que sur l'utilité commune. »\n\n1. Présente le document.\n2. Quelle idée remet-il en cause ?", indices: ["Nature, auteur, date : c'est un texte voté en août 1789.", "Pense à la société des trois ordres.", "Les privilèges de naissance de la noblesse et du clergé…"], etapes: [{ titre: "Présenter", explication: "Article 1 de la **Déclaration des droits de l'homme et du citoyen**, votée par l'Assemblée nationale le **26 août 1789**." }, { titre: "Interpréter", explication: "Il affirme l'**égalité en droits** et remet en cause la société d'ordres fondée sur les **privilèges de naissance**." }], reponse: "Texte juridique de 1789 qui met fin à l'inégalité des trois ordres." },
+    { titre: "Expliquer un enchaînement", competence: "Expliquer", enonce: "Explique en 5 lignes pourquoi la fuite à Varennes (juin 1791) fragilise la monarchie constitutionnelle.", indices: ["Que cherchait à faire le roi en fuyant ?", "Pense à la confiance du peuple et des députés.", "Le roi semble refuser la Constitution qu'il a acceptée…"], etapes: [{ titre: "Le fait", explication: "Louis XVI tente de quitter la France et est arrêté à **Varennes**." }, { titre: "La conséquence", explication: "Il apparaît comme opposé à la Révolution : la **confiance** est rompue, l'idée de **République** progresse." }], reponse: "Le roi perd la confiance du peuple, ce qui prépare la chute de la monarchie en 1792." },
+  ],
+  maths: [
+    { titre: "Calculer l'hypoténuse", competence: "Calculer une longueur", enonce: "ABC est rectangle en A, AB = 5 cm et AC = 12 cm. Calcule BC.", indices: ["Quel est le côté opposé à l'angle droit ?", "Théorème de Pythagore : BC² = AB² + AC².", "BC² = 25 + 144 = …"], etapes: [{ titre: "Identifier l'hypoténuse", explication: "L'angle droit est en A : l'hypoténuse est **[BC]**." }, { titre: "Appliquer le théorème", explication: "BC² = AB² + AC² = 25 + 144 = 169." }, { titre: "Conclure", explication: "BC = √169 = **13 cm**." }], reponse: "BC = 13 cm" },
+    { titre: "Un côté de l'angle droit", competence: "Calculer une longueur", enonce: "EFG est rectangle en E, FG = 10 cm et EF = 6 cm. Calcule EG.", indices: ["Ici on connaît l'hypoténuse.", "EG² = FG² − EF².", "EG² = 100 − 36 = …"], etapes: [{ titre: "Écrire l'égalité", explication: "FG² = EF² + EG², donc EG² = FG² − EF²." }, { titre: "Calculer", explication: "EG² = 100 − 36 = 64, donc EG = **8 cm**." }], reponse: "EG = 8 cm" },
+    { titre: "Rectangle ou pas ?", competence: "Raisonner", enonce: "Un triangle a pour côtés 7 cm, 24 cm et 25 cm. Est-il rectangle ? Justifie.", indices: ["Repère le plus grand côté.", "Compare son carré à la somme des deux autres carrés.", "25² = 625 et 7² + 24² = 49 + 576 = …"], etapes: [{ titre: "Comparer", explication: "25² = 625 ; 7² + 24² = 49 + 576 = 625." }, { titre: "Conclure avec la réciproque", explication: "L'égalité est vraie : d'après la **réciproque du théorème de Pythagore**, le triangle est rectangle." }], reponse: "Oui, il est rectangle." },
+  ],
+};
+const DEFIS = {
+  histoire: { titre: "Et si tu étais député en 1789 ?", situation: "Nous sommes en août 1789. Un député du tiers état te demande de l'aider à convaincre l'Assemblée d'abolir les privilèges.", consigne: "Rédige un court discours (10 lignes) avec trois arguments tirés du cours.", criteres: ["Trois arguments justes et différents", "Vocabulaire du chapitre (privilèges, tiers état, égalité…)", "Au moins un exemple précis"], pistes: ["Qui paie l'impôt ?", "Que proclame bientôt la DDHC ?"], corrige: "Arguments attendus : injustice fiscale (le tiers état paie presque tout), égalité en droits des hommes, utilité commune comme seul fondement des distinctions, poids du tiers état (98 % de la population)." },
+  maths: { titre: "La télé passe-t-elle ?", situation: "Une famille veut acheter une télévision de 55 pouces (diagonale de 140 cm, format 16/9 : largeur 122 cm, hauteur 69 cm). Le meuble mesure 120 cm de large.", consigne: "La télé tient-elle sur le meuble sans dépasser ? Une télévision de 50 pouces (diagonale 127 cm) conviendrait-elle ? Justifie par des calculs.", criteres: ["Vérification de la largeur de la 55 pouces", "Calcul de la largeur de la 50 pouces avec Pythagore ou la proportionnalité", "Conclusion claire"], pistes: ["La largeur, la hauteur et la diagonale forment un triangle rectangle.", "Pour la 50 pouces, garde le format 16/9."], corrige: "122 cm > 120 cm : la 55 pouces dépasse. Pour la 50 pouces, coefficient 127/140 ≈ 0,907 : largeur ≈ 110,7 cm < 120 cm, elle convient." },
+};
+const cle = (fiche) => (fiche.demoKey === "maths" ? "maths" : "histoire");
+export async function genererExercices(fiche, onProgress) {
+  await simuler("x".repeat(3000), onProgress, 2500);
+  return EXOS[cle(fiche)];
+}
+export async function genererDefi(fiche, onProgress) {
+  await simuler("x".repeat(1500), onProgress, 2000);
+  return DEFIS[cle(fiche)];
+}
+export async function evaluerDefi(_fiche, _defi, reponse, onProgress) {
+  await simuler("x".repeat(800), onProgress, 1500);
+  const longue = reponse.trim().split(/\s+/).length >= 30;
+  return {
+    valide: longue,
+    note: longue ? 15 : 8,
+    points_forts: longue ? ["Ton raisonnement suit les critères demandés.", "Tu utilises le vocabulaire du chapitre."] : ["Tu as commencé à répondre."],
+    a_ameliorer: longue ? ["Ajoute un exemple chiffré ou daté pour convaincre."] : ["Développe davantage : au moins trois arguments ou étapes de calcul."],
+    conseil: "Mode démo : évaluation simplifiée. Avec Claude, ta réponse est vraiment lue et corrigée.",
+  };
+}
+
 export async function testerCle() {
   await wait(600);
   return "OK";

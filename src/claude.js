@@ -59,6 +59,7 @@ function consignes() {
     `Tu es Révizz, professeur particulier bienveillant et exigeant de ${prenom || "un élève"} (niveau : ${classe || "collège/lycée"}), en France.`,
     "Tutoie l'élève. Phrases claires, adaptées à son niveau, vocabulaire des programmes de l'Éducation nationale.",
     "Reste fidèle au cours fourni ; n'invente pas de notions absentes, sauf pour compléter une explication de façon exacte.",
+    "Respecte les attendus du programme officiel de ce niveau (Éduscol) : notions, capacités et vocabulaire attendus en classe.",
     "Formules en texte simple avec symboles Unicode (x², √, π, ≤, →, H₂O), jamais en LaTeX.",
     "Markdown : titres courts (##), listes, **gras** pour les mots importants. Sois concis : pas de répétition, pas de formule de politesse, pas d'emoji.",
   ].join("\n");
@@ -420,6 +421,101 @@ async function genererQCMClaude(fiche, niveau, nombre, dejaPosees, onProgress) {
   );
 }
 
+// ---------- Parcours en 3 paliers ----------
+// Palier 1 « Je sais » : cartes + QCM (déjà en place).
+// Palier 2 « Je sais faire » : exercices d'application avec coups de pouce et correction pas à pas.
+// Palier 3 « Je vais plus loin » : un défi (situation nouvelle), évalué par Claude.
+
+const EXERCICES_SCHEMA = obj({
+  exercices: arr(
+    obj({
+      titre: str("Titre court"),
+      competence: str("Capacité travaillée, ex : « Calculer une longueur », « Analyser un document »"),
+      enonce: str("Énoncé complet en Markdown ; inclure le court document à étudier s'il y en a un"),
+      indices: arr(str("Coup de pouce"), "Exactement 3 coups de pouce progressifs : 1) une piste, 2) la méthode, 3) le début de la résolution"),
+      etapes: arr(obj({ titre: str("Nom de l'étape"), explication: str("Ce qu'on fait et pourquoi, en Markdown") }), "Correction pas à pas, 2 à 5 étapes"),
+      reponse: str("Réponse finale attendue, courte"),
+    }),
+    "Les exercices"
+  ),
+});
+
+const DEFI_SCHEMA = obj({
+  titre: str("Titre accrocheur"),
+  situation: str("Situation nouvelle et concrète en Markdown, qui mobilise plusieurs notions du chapitre"),
+  consigne: str("Ce que l'élève doit produire"),
+  criteres: arr(str("Critère de réussite"), "3 à 5 critères d'évaluation visibles par l'élève"),
+  pistes: arr(str("Piste"), "2 pistes de réflexion, sans donner la réponse"),
+  corrige: str("Corrigé détaillé en Markdown : démarche attendue et réponse"),
+});
+
+const EVALUATION_SCHEMA = obj({
+  valide: { type: "boolean", description: "true si le raisonnement est correct et répond à la consigne, même avec de petites maladresses" },
+  note: { type: "integer", description: "Note sur 20" },
+  points_forts: arr(str("Point fort"), "1 à 3 points forts"),
+  a_ameliorer: arr(str("Point à améliorer, avec la correction"), "0 à 3 points à améliorer"),
+  conseil: str("Un conseil concret pour progresser, une phrase"),
+});
+
+// Selon la matière, ce que veut dire « appliquer » et « aller plus loin ».
+const APPLICATION_PAR_MATIERE = `Adapte les exercices à la matière :
+- Mathématiques, Physique-Chimie : calculs et problèmes d'application directe du cours (données numériques réalistes, unités).
+- SVT, Physique-Chimie : exploitation d'une expérience ou d'un résultat (tableau, graphique décrit en texte).
+- Histoire-Géographie, EMC : analyse guidée d'un court document fourni dans l'énoncé (texte, chiffres, carte décrite), repères à situer.
+- SES : calcul et lecture de données (taux de variation, pourcentages, coefficient multiplicateur), définition mobilisée sur un exemple.
+- Français : repérage et interprétation dans un court extrait fourni.
+- Langues : compréhension d'un court texte et production guidée dans la langue (consignes en français).
+- SNT, NSI : petit exercice de logique, de données ou de lecture de code.`;
+
+async function genererExercicesClaude(fiche, onProgress) {
+  const data = await runJSON(
+    {
+      ...baseParams({ effort: "medium", maxTokens: 20000, system: systemCours(fiche) }),
+      messages: [
+        {
+          role: "user",
+          content: `Palier 2 « Je sais faire » : crée 3 exercices d'application du cours, de difficulté croissante, comme ceux faits en classe, qui couvrent les notions principales.\n${APPLICATION_PAR_MATIERE}\nChaque exercice a 3 coups de pouce progressifs et une correction pas à pas qui explique la méthode.`,
+        },
+      ],
+    },
+    EXERCICES_SCHEMA,
+    onProgress
+  );
+  return data.exercices;
+}
+
+async function genererDefiClaude(fiche, onProgress) {
+  return runJSON(
+    {
+      ...baseParams({ effort: "medium", maxTokens: 16000, system: systemCours(fiche) }),
+      messages: [
+        {
+          role: "user",
+          content: `Palier 3 « Je vais plus loin » : propose un défi qui oblige à transférer le cours dans une situation nouvelle (problème à modéliser, question de réflexion, argumentation, lien avec l'actualité ou une autre matière). Il doit être faisable en 20 à 30 minutes par l'élève, sans réponse toute faite dans le cours.`,
+        },
+      ],
+    },
+    DEFI_SCHEMA,
+    onProgress
+  );
+}
+
+async function evaluerDefiClaude(fiche, defi, reponse, onProgress) {
+  return runJSON(
+    {
+      ...baseParams({ effort: "medium", maxTokens: 8000, system: systemCours(fiche) }),
+      messages: [
+        {
+          role: "user",
+          content: `<defi>\n${defi.situation}\n\nConsigne : ${defi.consigne}\nCritères : ${defi.criteres.join(" ; ")}\n</defi>\n\n<corrige>\n${defi.corrige}\n</corrige>\n\n<reponse_eleve>\n${reponse}\n</reponse_eleve>\n\nÉvalue la réponse de l'élève en professeur bienveillant mais exigeant : le raisonnement compte plus que la rédaction. Valide le défi si le raisonnement est juste et répond à la consigne.`,
+        },
+      ],
+    },
+    EVALUATION_SCHEMA,
+    onProgress
+  );
+}
+
 export const TYPES_SUJET = {
   controle: "Contrôle en classe (30 à 55 min)",
   express: "Interro express (10 min)",
@@ -533,3 +629,6 @@ export const discuter = choisir(discuterClaude, demo.discuter);
 export const testerCle = choisir(testerCleClaude, demo.testerCle);
 export const trouverConnexes = choisir(trouverConnexesClaude, demo.trouverConnexes);
 export const miniFiche = choisir(miniFicheClaude, demo.miniFiche);
+export const genererExercices = choisir(genererExercicesClaude, demo.genererExercices);
+export const genererDefi = choisir(genererDefiClaude, demo.genererDefi);
+export const evaluerDefi = choisir(evaluerDefiClaude, demo.evaluerDefi);

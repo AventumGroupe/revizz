@@ -376,6 +376,50 @@ mark, mark.incertain { background: var(--warn-soft); color: var(--warn); font-we
 textarea { font-family: inherit; line-height: 1.5; resize: vertical; }
 .page-entiere { display: block; width: 100%; height: auto; border-radius: 10px; margin-bottom: 8px; }
 
+/* Parcours en 3 paliers */
+.parcours { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 14px 10px; margin: 6px 0 10px; }
+.palier { display: flex; gap: 12px; padding: 12px 0; position: relative; }
+.palier + .palier { border-top: 1px solid var(--line-2); }
+.palier-num { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .9rem; background: var(--line-2); color: var(--muted); }
+.palier.actuel .palier-num { background: var(--primary); color: var(--on-primary); }
+.palier.valide .palier-num { background: var(--good); color: #fff; }
+.palier-corps { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.palier-corps > b { font-size: 1rem; }
+.palier.a-venir .palier-corps > b { color: var(--muted); }
+.palier-detail { font-size: .85rem; color: var(--muted); margin: 4px 0 0; }
+.palier-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.palier-actions .btn { min-height: 40px; padding: 8px 12px; font-size: .88rem; }
+.parcours-fin { display: flex; align-items: center; gap: 8px; margin: 6px 0 4px; padding: 10px 12px; border-radius: 10px; background: var(--good-soft); color: var(--good); font-weight: 700; }
+.titre-section { margin-top: 22px; }
+.ressources { padding: 0; overflow: hidden; }
+.ressources summary { padding: 14px 16px; display: flex; align-items: center; gap: 8px; }
+.ressources a.ligne { color: inherit; text-decoration: none; border-top: 1px solid var(--line-2); }
+.resume-palier { padding: 10px 12px; border-radius: 10px; background: var(--soft); color: var(--primary-ink); margin-bottom: 4px; }
+.exo h3 { margin: 6px 0 8px; }
+.exo-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.tag-comp { font-size: .76rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tag-ok { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; font-weight: 700; color: var(--good); }
+.tag-ko { font-size: .8rem; font-weight: 700; color: var(--warn); }
+.exo-reussi { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.exo textarea { margin: 10px 0; }
+.indice, .reponse { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; margin: 8px 0; font-size: .92rem; }
+.indice { background: var(--warn-soft); } .indice .ic { color: var(--warn); margin-top: 2px; }
+.reponse { background: var(--good-soft); } .reponse .ic { color: var(--good); margin-top: 2px; }
+.etape { border-left: 3px solid var(--primary); padding: 4px 0 4px 12px; margin: 10px 0; }
+.etape .md { margin-top: 4px; }
+.exo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.exo-actions .btn { flex: 1 1 auto; min-height: 42px; padding: 9px 12px; font-size: .9rem; }
+.consigne { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: var(--soft); margin: 12px 0 0; }
+.eval-tete { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eval-tete span { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.eval-ok { border-color: var(--good); } .eval-ok .eval-tete span { color: var(--good); }
+.eval-ko .eval-tete span { color: var(--warn); }
+.puces { display: inline-flex; gap: 4px; }
+.puce { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: .75rem; font-weight: 800; background: var(--line-2); color: var(--muted); }
+.puce.cours { background: var(--primary); color: var(--on-primary); }
+.puce.ok { background: var(--good); color: #fff; }
+.paliers-ctrl { margin: 4px 0 8px; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 /* Scanner plein écran (toujours sombre : on regarde la caméra) */
 .scanner { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; outline: none; }

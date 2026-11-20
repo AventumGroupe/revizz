@@ -2,6 +2,7 @@
 // Le planning est calculé sur l'appareil : aucun appel à Claude.
 import { Capacitor } from "@capacitor/core";
 import { lire, ecrire, getFiches, uid, getSettings } from "./store.js";
+import { etatPaliers } from "./paliers.js";
 
 const KEY = "revizz.controles";
 const JOUR = 864e5;
@@ -50,71 +51,95 @@ const fichesDu = (c) =>
     .sort((a, b) => (a.cree || 0) - (b.cree || 0));
 
 /**
- * Planning : d'aujourd'hui à la veille du contrôle.
+ * Planning : d'aujourd'hui à la veille du contrôle, calé sur les 3 paliers de chaque chapitre.
+ * - Phase 1 « Je sais » : relire chaque fiche, puis le QCM du chapitre.
+ * - Phase 2 « Je sais faire » : exercices d'application (coups de pouce, correction pas à pas).
+ * - Phase 3 « Je vais plus loin » : un défi par chapitre.
  * - Tous les jours : les cartes à revoir.
- * - Les premiers jours : relire chaque fiche ; à partir du 2e jour : un QCM par jour (fiches en alternance).
- * - Préparation longue (6 jours ou plus) : un sujet blanc à mi-parcours.
- * - La veille : un sujet blanc type contrôle, un QCM bilan difficile et la relecture des points clés.
- * - Le jour J : relecture rapide et cartes.
+ * - La veille : sujet blanc type contrôle, QCM bilan difficile (si le temps le permet), relecture des points clés.
+ * Un palier déjà validé n'est plus programmé pour les jours suivants : le temps libéré va au palier d'après.
  * L'élève peut retirer des tâches (c.retires) et en ajouter (c.extras, par jour).
  */
 function planningDeBase(c) {
   const fiches = fichesDu(c);
   const reste = joursRestants(c);
   if (reste < 0) return [];
-  const t = (date, type, f, label, action) => ({ id: `${date}|${type}|${f?.id || "tout"}`, type, label, action });
+  const t = (date, type, cle, label, action) => ({ id: `${date}|${type}|${cle || "tout"}`, type, label, action });
   const versFiche = (f, tab) => ({ vue: "fiche", ficheId: f.id, tab });
+  const versPalier = (palier, chapitre) => ({ vue: "palier", palier, chapitre });
   const jours = [];
   for (let k = 0; k < Math.max(reste, 1); k++) jours.push(iso(versDate(aujourdhui()).getTime() + k * JOUR));
   const plan = jours.map((date) => ({ date, taches: [] }));
+  const auj = aujourdhui();
+  const chapitres = [...new Set(fiches.map((f) => f.chapitre || "Sans chapitre"))];
+  const plusieurs = chapitres.length > 1;
+  const nomChap = (ch) => (plusieurs ? ` · ${ch}` : "");
+  // Un palier validé ne compte que pour les jours à venir (les tâches d'aujourd'hui restent visibles).
+  const etats = Object.fromEntries(chapitres.map((ch) => [ch, etatPaliers(c.matiere, ch)]));
+  const aFaire = (date, ch, palier) => date <= auj || !etats[ch][`p${palier}`];
+
   if (reste === 0) {
     const d = plan[0].date;
-    for (const f of fiches) plan[0].taches.push(t(d, "relire", f, `Relire les points clés : ${f.titre}`, versFiche(f, "resume")));
+    for (const f of fiches) plan[0].taches.push(t(d, "relire", f.id, `Relire les points clés : ${f.titre}`, versFiche(f, "resume")));
     plan[0].taches.push(t(d, "cartes", null, "Cartes à revoir (5 min)", { vue: "revision" }));
     return plan;
   }
+
   const n = plan.length;
   const travail = n > 1 ? n - 1 : 1; // jours avant la veille
-  // Relectures réparties sur les premiers jours.
+  const phase = (k) => (travail === 1 ? [1, 2] : k < Math.ceil(travail / 3) ? [1] : k < Math.ceil((2 * travail) / 3) ? [2] : [3]);
+  const joursDe = (ph) => plan.slice(0, travail).map((j, k) => ({ j, k })).filter(({ k }) => phase(k).includes(ph));
+
+  // Phase 1 : relectures réparties, puis le QCM du chapitre le dernier jour de la phase.
+  const j1 = joursDe(1);
   fiches.forEach((f, i) => {
-    const k = Math.min(travail - 1, Math.floor((i * travail) / fiches.length));
-    plan[k].taches.push(t(plan[k].date, "relire", f, `Relire la fiche : ${f.titre}`, versFiche(f, "resume")));
+    const { j } = j1[Math.min(j1.length - 1, Math.floor((i * j1.length) / fiches.length))] || {};
+    if (j && aFaire(j.date, f.chapitre || "Sans chapitre", 1)) j.taches.push(t(j.date, "relire", f.id, `Relire la fiche : ${f.titre}`, versFiche(f, "resume")));
   });
-  // Un QCM par jour à partir du 2e jour de travail (ou dès le 1er s'il n'y en a qu'un), fiches en alternance.
-  if (fiches.length)
-    for (let k = travail > 1 ? 1 : 0; k < travail; k++) {
-      const f = fiches[(k - 1 + fiches.length) % fiches.length];
-      plan[k].taches.push(t(plan[k].date, "qcm", f, `QCM : ${f.titre}`, versFiche(f, "qcm")));
-    }
+  const dernier1 = j1.at(-1)?.j;
+  if (dernier1) for (const ch of chapitres) if (aFaire(dernier1.date, ch, 1)) dernier1.taches.push(t(dernier1.date, "p1qcm", ch, `QCM du chapitre${nomChap(ch)} (palier 1)`, versPalier(1, ch)));
+
+  // Phase 2 : exercices d'application, chapitres en alternance.
+  joursDe(2).forEach(({ j }, i) => {
+    const ch = chapitres[i % Math.max(chapitres.length, 1)];
+    if (ch && aFaire(j.date, ch, 2)) j.taches.push(t(j.date, "exos", ch, `Exercices d'application${nomChap(ch)} (palier 2)`, versPalier(2, ch)));
+  });
+  // Phase 3 : un défi par chapitre (s'il n'y a pas de jour de phase 3, le défi va la veille).
+  const j3 = joursDe(3);
+  chapitres.forEach((ch, i) => {
+    const j = j3.length ? j3[i % j3.length].j : plan[n - 1];
+    if (aFaire(j.date, ch, 3)) j.taches.push(t(j.date, "defi", ch, `Défi${nomChap(ch)} (palier 3)`, versPalier(3, ch)));
+  });
   // Sujet blanc à mi-parcours pour les longues préparations.
   if (n >= 6 && fiches.length) {
-    const k = Math.floor(travail / 2);
-    const f = fiches[k % fiches.length];
-    plan[k].taches.push(t(plan[k].date, "sujet", f, `Sujet blanc : ${f.titre}`, versFiche(f, "sujet")));
+    const j = joursDe(2).at(-1)?.j;
+    if (j) j.taches.push(t(j.date, "sujet", fiches[0].id, `Sujet blanc : ${fiches[0].titre}`, versFiche(fiches[0], "sujet")));
   }
   plan.forEach((p) => p.taches.push(t(p.date, "cartes", null, "Réviser les cartes à revoir", { vue: "revision" })));
   // La veille.
   const veille = plan[n - 1];
-  if (fiches.length) {
-    veille.taches.push(t(veille.date, "sujet", fiches[0], "Sujet blanc type contrôle", versFiche(fiches[0], "sujet")));
-    if (n > 1) {
+  if (fiches.length && n > 1) {
+    veille.taches.push(t(veille.date, "sujet", fiches[0].id, "Sujet blanc type contrôle", versFiche(fiches[0], "sujet")));
+    if (n >= 4) {
       const f = fiches[fiches.length - 1];
-      veille.taches.push(t(veille.date, "qcm", f, `QCM bilan (difficile) : ${f.titre}`, { ...versFiche(f, "qcm"), niveau: "difficile" }));
-      veille.taches.push(t(veille.date, "points", null, "Relire les points clés de toutes les fiches", { vue: "matiere" }));
+      veille.taches.push(t(veille.date, "qcm", f.id, `QCM bilan (difficile) : ${f.titre}`, { ...versFiche(f, "qcm"), niveau: "difficile" }));
     }
+    veille.taches.push(t(veille.date, "points", null, "Relire les points clés de toutes les fiches", { vue: "matiere" }));
   }
   return plan;
 }
 
-const LIBELLES = { relire: "Relire la fiche", qcm: "QCM", sujet: "Sujet blanc", cartes: "Réviser les cartes à revoir", test: "Test final du chapitre" };
+const LIBELLES = { relire: "Relire la fiche", qcm: "QCM", sujet: "Sujet blanc", cartes: "Réviser les cartes à revoir", test: "Test final du chapitre", exos: "Exercices d'application", defi: "Défi" };
 /** Tâche ajoutée par l'élève. */
 export function ajouterTache(c, date, type, fiche) {
   const tache = {
     id: `${date}|x|${uid()}`,
     type,
-    label: fiche && type !== "cartes" ? `${LIBELLES[type]} : ${fiche.titre}` : LIBELLES[type],
+    label: ["exos", "defi"].includes(type) ? `${LIBELLES[type]} · ${fiche?.chapitre || "Sans chapitre"}` : fiche && type !== "cartes" ? `${LIBELLES[type]} : ${fiche.titre}` : LIBELLES[type],
     action:
       type === "cartes" ? { vue: "revision" } :
+      type === "exos" ? { vue: "palier", palier: 2, chapitre: fiche?.chapitre || "Sans chapitre" } :
+      type === "defi" ? { vue: "palier", palier: 3, chapitre: fiche?.chapitre || "Sans chapitre" } :
       type === "test" ? { vue: "chapitre", chapitre: fiche?.chapitre || "Sans chapitre" } :
       { vue: "fiche", ficheId: fiche.id, tab: { relire: "resume", qcm: "qcm", sujet: "sujet" }[type] },
   };
@@ -200,3 +225,6 @@ export async function programmerRappels(c, nomMatiere) {
   saveControle(c);
   return true;
 }
+
+/** Chapitres concernés par un contrôle. */
+export const chapitresDu = (c) => [...new Set(fichesDu(c).map((f) => f.chapitre || "Sans chapitre"))];
