@@ -426,6 +426,9 @@ textarea { font-family: inherit; line-height: 1.5; resize: vertical; }
 .exercice { margin: 18px 0 6px; }
 .ex-titre { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin: 0 0 8px; }
 .ex-titre span { color: var(--muted); font-size: .85rem; font-weight: 700; white-space: nowrap; }
+.methode { margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--soft); font-size: .9rem; }
+.methode summary { font-weight: 650; color: var(--primary-ink); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.methode p { margin: 6px 0 2px; }
 .document { background: var(--line-2); border-color: transparent; }
 .question-bloc { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 8px 0; }
 .q-enonce { display: flex; gap: 6px; align-items: baseline; margin: 0 0 8px; font-weight: 600; }

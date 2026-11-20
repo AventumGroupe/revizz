@@ -1242,6 +1242,7 @@ function tabSujet(f) {
     .map(
       (ex, ie) => `<section class="exercice">
       <h3 class="ex-titre">Exercice ${ie + 1} · ${esc(ex.titre)} <span>${fmt(ex.questions.reduce((t, q) => t + (Number(q.points) || 0), 0))} pts</span></h3>
+      ${ex.type_exercice || ex.methode ? `<details class="methode"><summary>${ic("astuce", 16)} Méthode${ex.type_exercice ? ` : ${esc(ex.type_exercice)}` : ""}</summary>${ex.methode ? `<p>${esc(ex.methode)}</p>` : ""}</details>` : ""}
       ${ex.document ? `<div class="card md document">${md(ex.document)}</div>` : ""}
       ${ex.questions
         .map((q) => {
@@ -1249,7 +1250,7 @@ function tabSujet(f) {
           const r = s.correction?.questions?.find((x) => x.numero === i + 1);
           return `<div class="question-bloc">
             <p class="q-enonce"><b>${i + 1}.</b> <span>${esc(q.enonce)}</span> <em>${fmt(q.points)} pt${q.points > 1 ? "s" : ""}</em></p>
-            <textarea data-rep="${i}" rows="3" placeholder="Ta réponse" ${corrige ? "readonly" : ""}>${esc(reps[i] || "")}</textarea>
+            <textarea data-rep="${i}" rows="${q.points >= 6 ? 12 : q.points >= 3 ? 5 : 3}" placeholder="Ta réponse" ${corrige ? "readonly" : ""}>${esc(reps[i] || "")}</textarea>
             ${
               corrige
                 ? `<div class="corr ${r && r.points_obtenus >= q.points * 0.75 ? "corr-ok" : r && r.points_obtenus >= q.points * 0.5 ? "corr-moyen" : "corr-ko"}">

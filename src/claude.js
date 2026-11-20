@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
 import { nomsPourClaude } from "./matieres.js";
+import { referentielPourSujet, grillePourCorrection } from "./evaluation.js";
 import { zoomer } from "./image.js";
 
 export const MODELS = [
@@ -201,6 +202,8 @@ const SUJET_SCHEMA = obj({
   exercices: arr(
     obj({
       titre: str("Titre de l'exercice"),
+      type_exercice: str("Nom officiel du type d'exercice, ex : Réponse à une question problématisée, Analyse de document(s), Commentaire de texte, Automatismes, Étude d'un document"),
+      methode: str("Méthode attendue rappelée à l'élève en 2 à 4 phrases courtes (étapes), vide pour des questions de cours"),
       document: str("Document à étudier en Markdown (texte, données, description d'une carte ou d'un graphique), vide s'il n'y en a pas"),
       questions: arr(
         obj({
@@ -562,15 +565,15 @@ export const TYPES_SUJET = {
   controle: "Contrôle en classe (30 à 55 min)",
   express: "Interro express (10 min)",
   brevet: "Sujet type Brevet",
-  bac: "Sujet type Bac",
+  bac: "Format officiel (type Bac)",
   oral: "Préparation à l'oral",
 };
 
 const FORMAT_SUJET = {
-  controle: "un contrôle de 50 minutes : 3 exercices, 8 à 10 questions, des questions de cours à la réflexion",
+  controle: "un contrôle de 50 minutes comme en classe : 2 ou 3 exercices, des questions de cours puis les types d'exercices officiels de la matière (voir les attendus)",
   express: "une interro express de 10 minutes : 1 exercice, 3 à 4 questions courtes",
   brevet: "un sujet type brevet : 2 ou 3 exercices progressifs, avec documents si la matière s'y prête",
-  bac: "un sujet type bac (format des évaluations communes) : 2 ou 3 exercices, analyse de document ou problème, réponses argumentées",
+  bac: "un sujet qui reprend le format officiel de l'épreuve de la matière (voir les attendus), à la mesure d'un élève de Seconde",
   oral: "une préparation à l'oral : 4 à 6 questions de jury, l'élève écrit les idées qu'il dirait",
 };
 async function genererSujetClaude(fiche, type, onProgress) {
@@ -584,7 +587,8 @@ async function genererSujetClaude(fiche, type, onProgress) {
 - Chaque question ne demande qu'UNE seule chose : l'élève y répond juste en dessous. Découpe les questions doubles.
 - Total des points : 20. Barème détaillé pour chaque question (critères et points), comme un professeur.
 - Réponse attendue complète pour chaque question (elle ne sera montrée qu'après la copie rendue).
-${APPLICATION_PAR_MATIERE}`,
+- Utilise les types d'exercices officiels de la matière, avec leur nom et leur méthode. Un exercice long (réponse à une question problématisée, commentaire, raisonnement sur dossier, mobiliser ses connaissances…) tient en UNE question notée sur beaucoup de points, avec un barème qui reprend les critères de la méthode (introduction, organisation, connaissances, exemples, rédaction…).
+${referentielPourSujet(fiche.matiere) || APPLICATION_PAR_MATIERE}`,
         },
       ],
     },
@@ -599,7 +603,7 @@ async function corrigerCopieClaude(fiche, sujet, reponses, onProgress) {
   const copie = sujet.exercices
     .map(
       (ex, i) =>
-        `## Exercice ${i + 1} : ${ex.titre}\n${ex.document ? `Document :\n${ex.document}\n` : ""}` +
+        `## Exercice ${i + 1} : ${ex.titre}${ex.type_exercice ? ` (${ex.type_exercice})` : ""}\n${ex.methode ? `Méthode attendue : ${ex.methode}\n` : ""}${ex.document ? `Document :\n${ex.document}\n` : ""}` +
         ex.questions
           .map((q) => {
             n++;
@@ -611,7 +615,7 @@ async function corrigerCopieClaude(fiche, sujet, reponses, onProgress) {
   return runJSON(
     {
       ...baseParams({ effort: "medium", maxTokens: 16000, system: systemCours(fiche) }),
-      messages: [{ role: "user", content: `${copie}\n\nCorrige cette copie question par question.\n${METHODE_CORRECTION}` }],
+      messages: [{ role: "user", content: `${copie}\n\nCorrige cette copie question par question.\n${METHODE_CORRECTION}\n${grillePourCorrection(fiche.matiere)}` }],
     },
     CORRECTION_SCHEMA,
     onProgress
