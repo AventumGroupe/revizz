@@ -8,6 +8,7 @@ import { ficheDeDepart, questionsDepartDemo } from "./demo.js";
 import { ouvrirScanner } from "./scanner.js";
 import * as sauvegarde from "./sauvegarde.js";
 import * as synchro from "./synchro.js";
+import { POINTS_LANGUE, estRedactionnelle } from "./evaluation.js";
 import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
@@ -1180,11 +1181,19 @@ let sujetOuvert = null; // index dans f.sujets
 let corrigeVisible = false; // anciens sujets (format texte)
 const questionsDu = (s) => (s.exercices || []).flatMap((e) => e.questions || []);
 // Note sur 20 à partir des points obtenus (le barème est respecté question par question).
-function noteDuSujet(s) {
+// La maîtrise de la langue a sa ligne à part (au moins 2 points, comme aux examens à partir de 2027).
+const langueSur = (s) => (s.correction?.langue ? s.langueSur ?? POINTS_LANGUE : 0);
+function noteDuSujet(s, matiere) {
   const qs = questionsDu(s);
-  const total = qs.reduce((n, q) => n + (Number(q.points) || 0), 0) || 20;
-  const obtenu = qs.reduce((n, q, i) => n + Math.min(Number(q.points) || 0, Math.max(0, Number(s.correction?.questions?.find((r) => r.numero === i + 1)?.points_obtenus) || 0)), 0);
-  return { obtenu, total, sur20: Math.round((obtenu / total) * 20 * 2) / 2 };
+  const lsur = langueSur(s);
+  const total = qs.reduce((n, q) => n + (Number(q.points) || 0), 0) + lsur || 20;
+  const langue = lsur ? Math.min(lsur, Math.max(0, Number(s.correction.langue.points_obtenus) || 0)) : 0;
+  const obtenu = langue + qs.reduce((n, q, i) => n + Math.min(Number(q.points) || 0, Math.max(0, Number(s.correction?.questions?.find((r) => r.numero === i + 1)?.points_obtenus) || 0)), 0);
+  let sur20 = Math.round((obtenu / total) * 20 * 2) / 2;
+  // Épreuve rédactionnelle : une copie défaillante sur toute la langue ne peut pas avoir la moyenne.
+  const plafonne = !!(s.correction?.langue?.defaillante && estRedactionnelle(matiere) && s.type !== "express" && sur20 >= 10);
+  if (plafonne) sur20 = 9.5;
+  return { obtenu, total, sur20, langue, lsur, plafonne };
 }
 const fmt = (n) => String(n).replace(".", ",");
 function tabSujet(f) {
@@ -1205,7 +1214,7 @@ function tabSujet(f) {
         ? `<h3>Mes sujets</h3><div class="liste-lignes">${f.sujets
             .map(
               (x, i) =>
-                `<button class="ligne" data-sujet="${i}">${ic("sujet", 20, "t-ic")}<span class="ligne-txt"><b>${esc(x.titre)}</b><small>${esc(x.duree)}${x.correction ? ` · ${fmt(noteDuSujet(x).sur20)}/20` : x.note ? " · corrigé" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
+                `<button class="ligne" data-sujet="${i}">${ic("sujet", 20, "t-ic")}<span class="ligne-txt"><b>${esc(x.titre)}</b><small>${esc(x.duree)}${x.correction ? ` · ${fmt(noteDuSujet(x, f.matiere).sur20)}/20` : x.note ? " · corrigé" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
             )
             .join("")}</div>`
         : ""
@@ -1225,7 +1234,7 @@ function tabSujet(f) {
   const reps = s.reponses || [];
   const total = questionsDu(s).length;
   const remplies = reps.filter((r) => r && r.trim()).length;
-  const note = corrige ? noteDuSujet(s) : null;
+  const note = corrige ? noteDuSujet(s, f.matiere) : null;
   let n = 0;
   return `
   <button class="btn ghost" id="sujet-back">${ic("retour", 18)} Mes sujets</button>
@@ -1238,8 +1247,22 @@ function tabSujet(f) {
     corrige
       ? `<div class="card bilan">
           <div class="bilan-note"><b class="big-num">${fmt(note.sur20)}<small>/20</small></b><span>${fmt(note.obtenu)} point${note.obtenu > 1 ? "s" : ""} sur ${fmt(note.total)}</span></div>
+          ${note.plafonne ? `<p class="alerte">Note ramenée sous la moyenne : la copie est défaillante sur l'ensemble de la langue (règle des épreuves rédactionnelles).</p>` : ""}
           <p>${esc(s.correction.appreciation)}</p>
           ${s.correction.points_forts?.length ? `<h3>Points forts</h3><ul class="keys">${s.correction.points_forts.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+          ${
+            note.lsur
+              ? `<div class="langue-bloc"><div class="corr-tete"><b>Maîtrise de la langue <span class="nowrap">${fmt(note.langue)} / ${fmt(note.lsur)}</span></b><span>${esc(s.correction.langue.niveau || "")}</span></div>
+                <p>${esc(s.correction.langue.commentaire || "")}</p>
+                ${
+                  s.correction.langue.erreurs?.length
+                    ? `<details><summary>Corrections de la rédaction (${s.correction.langue.erreurs.length})</summary><ul class="erreurs-langue">${s.correction.langue.erreurs
+                        .map((e) => `<li><s>${esc(e.extrait)}</s><b>${esc(e.correction)}</b><small>${esc(e.regle)}</small></li>`)
+                        .join("")}</ul></details>`
+                    : ""
+                }</div>`
+              : ""
+          }
           ${s.correction.a_travailler?.length ? `<h3>À travailler</h3><ul class="keys">${s.correction.a_travailler.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
         </div>`
       : ""
@@ -1297,7 +1320,7 @@ function bindSujet(f) {
       const p = progressUI($("progress"), "Claude rédige ton sujet et son barème…");
       try {
         const s = await ai.genererSujet(f, sujetType, p.update);
-        f.sujets.unshift({ ...s, type: sujetType, date: Date.now(), reponses: [] });
+        f.sujets.unshift({ ...s, type: sujetType, date: Date.now(), reponses: [], langueSur: POINTS_LANGUE });
         f.sujets = f.sujets.slice(0, 10);
         store.saveFiche(f);
         sujetOuvert = 0;
@@ -1338,12 +1361,12 @@ function bindSujet(f) {
   if ($("recorriger"))
     $("recorriger").onclick = async (e) => {
       e.target.disabled = true;
-      const avant = noteDuSujet(s).sur20;
+      const avant = noteDuSujet(s, f.matiere).sur20;
       const p = progressUI($("progress"), "Le prof relit ta copie…");
       try {
         s.correction = await ai.corrigerCopie(f, s, (s.reponses || []).slice(0, total), p.update);
         store.saveFiche(f);
-        const apres = noteDuSujet(s).sur20;
+        const apres = noteDuSujet(s, f.matiere).sur20;
         render();
         window.scrollTo(0, 0);
         toast(apres === avant ? `Note confirmée : ${fmt(apres)}/20` : `Nouvelle note : ${fmt(apres)}/20 (avant ${fmt(avant)})`);

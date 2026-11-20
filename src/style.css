@@ -487,3 +487,14 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .interrupteur input { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--primary); flex: none; }
 .interrupteur span { display: grid; gap: 2px; }
 .interrupteur small { color: var(--muted); font-size: .85rem; }
+
+/* Maîtrise de la langue */
+.langue-bloc { margin: 12px 0; padding: 10px 12px; border-radius: 10px; background: var(--line-2); font-size: .92rem; }
+.langue-bloc p { margin: 6px 0 0; }
+.langue-bloc summary { font-weight: 650; color: var(--primary-ink); margin-top: 8px; cursor: pointer; }
+.erreurs-langue { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.erreurs-langue li { display: grid; gap: 2px; padding: 8px; border-radius: 8px; background: var(--card); }
+.erreurs-langue s { color: var(--bad); }
+.erreurs-langue b { color: var(--good); font-weight: 650; }
+.erreurs-langue small { color: var(--muted); }
+.nowrap { white-space: nowrap; }

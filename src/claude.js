@@ -4,7 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
 import { nomsPourClaude } from "./matieres.js";
-import { referentielPourSujet, grillePourCorrection } from "./evaluation.js";
+import { referentielPourSujet, grillePourCorrection, GRILLE_LANGUE, POINTS_LANGUE } from "./evaluation.js";
 import { zoomer } from "./image.js";
 
 export const MODELS = [
@@ -208,7 +208,7 @@ const SUJET_SCHEMA = obj({
       questions: arr(
         obj({
           enonce: str("UNE seule question ou tâche, claire, à laquelle l'élève répond juste en dessous"),
-          points: { type: "number", description: "Points de la question (le total du sujet fait 20)" },
+          points: { type: "number", description: `Points de la question (le total des questions fait ${20 - POINTS_LANGUE} ; les ${POINTS_LANGUE} derniers points vont à la maîtrise de la langue)` },
           competence: str("Compétence évaluée, ex : Connaître, Calculer, Raisonner, Analyser un document, Argumenter"),
           reponse_attendue: str("Réponse attendue en Markdown, complète"),
           bareme: arr(obj({ critere: str("Ce qui rapporte des points"), points: { type: "number" } }), "Barème détaillé de la question, critère par critère"),
@@ -229,7 +229,7 @@ const METHODE_CORRECTION = `Méthode de correction :
 - Applique le barème de chaque question critère par critère ; accorde des points partiels (par demi-points).
 - Mathématiques et sciences : valorise la démarche. Un raisonnement juste avec une erreur de calcul garde l'essentiel des points ; une trace de recherche pertinente, même incomplète, rapporte des points ; un résultat juste sans la justification demandée n'obtient pas tous les points. Repère les compétences (chercher, modéliser, représenter, raisonner, calculer, communiquer).
 - Réponses rédigées (histoire-géographie, français, SES, langues, philosophie) : évalue par capacités (connaissances, compréhension et analyse, argumentation et organisation, maîtrise de la langue) avec 4 niveaux de maîtrise : très insuffisant (0 à 25 % des points), insuffisant (25 à 50 %), satisfaisant (50 à 75 %), très satisfaisant (75 à 100 %).
-- La langue compte mais ne fait pas perdre plus de 10 % des points d'une question, sauf si elle empêche de comprendre.
+- La langue n'est pas notée dans les questions : elle a sa propre ligne (voir plus bas).
 - Une réponse vide, « je ne sais pas » ou hors sujet vaut 0. Ne prête pas à l'élève ce qu'il n'a pas écrit.
 - Commentaires bienveillants et précis : ce qui est réussi, ce qui manque, la bonne réponse en une phrase.`;
 
@@ -243,6 +243,13 @@ const CORRECTION_SCHEMA = obj({
     }),
     "Une entrée par question"
   ),
+  langue: obj({
+    niveau: { type: "string", enum: ["très insuffisant", "insuffisant", "satisfaisant", "très satisfaisant"] },
+    points_obtenus: { type: "number", description: "Points de maîtrise de la langue, par demi-points, de 0 au maximum de la ligne" },
+    commentaire: str("Bilan de l'expression écrite en 1 ou 2 phrases, avec un conseil concret"),
+    erreurs: arr(obj({ extrait: str("Passage fautif, recopié tel quel"), correction: str("Passage corrigé"), regle: str("La règle en quelques mots") }), "Erreurs les plus utiles à corriger, 8 au plus, vide s'il n'y en a pas"),
+    defaillante: { type: "boolean", description: "true seulement si la copie est défaillante sur l'ensemble des aspects de la langue" },
+  }),
   appreciation: str("Appréciation générale, 2 phrases, comme sur une copie"),
   points_forts: arr(str("Point fort"), "1 à 3 points forts"),
   a_travailler: arr(str("Point à travailler, concret"), "1 à 3 points à travailler"),
@@ -588,7 +595,7 @@ async function genererSujetClaude(fiche, type, onProgress) {
           role: "user",
           content: `Prépare ${FORMAT_SUJET[type] || FORMAT_SUJET.controle}, sur le cours, réaliste et adapté au niveau de l'élève.
 - Chaque question ne demande qu'UNE seule chose : l'élève y répond juste en dessous. Découpe les questions doubles.
-- Total des points : 20. Barème détaillé pour chaque question (critères et points), comme un professeur. Chaque critère décrit une idée ou un savoir-faire à montrer, pas des mots exacts à recopier ; ne réserve un critère au vocabulaire que si la question demande une définition ou un terme.
+- Total des points des questions : ${20 - POINTS_LANGUE} (les ${POINTS_LANGUE} derniers points de la note sur 20 sont réservés à la maîtrise de la langue, notée à part). Barème détaillé pour chaque question (critères et points), comme un professeur. Chaque critère décrit une idée ou un savoir-faire à montrer, pas des mots exacts à recopier ; ne réserve un critère au vocabulaire que si la question demande une définition ou un terme.
 - Réponse attendue complète pour chaque question (elle ne sera montrée qu'après la copie rendue).
 - Utilise les types d'exercices officiels de la matière, avec leur nom et leur méthode. Un exercice long (réponse à une question problématisée, commentaire, raisonnement sur dossier, mobiliser ses connaissances…) tient en UNE question notée sur beaucoup de points, avec un barème qui reprend les critères de la méthode (introduction, organisation, connaissances, exemples, rédaction…).
 ${referentielPourSujet(fiche.matiere) || APPLICATION_PAR_MATIERE}`,
@@ -618,7 +625,7 @@ async function corrigerCopieClaude(fiche, sujet, reponses, onProgress) {
   return runJSON(
     {
       ...baseParams({ effort: "medium", maxTokens: 16000, system: systemCours(fiche) }),
-      messages: [{ role: "user", content: `${copie}\n\nCorrige cette copie question par question.\n${METHODE_CORRECTION}\n${grillePourCorrection(fiche.matiere)}` }],
+      messages: [{ role: "user", content: `${copie}\n\nCorrige cette copie question par question, puis note la maîtrise de la langue sur l'ensemble de la copie.\n${METHODE_CORRECTION}\n${grillePourCorrection(fiche.matiere)}\n${GRILLE_LANGUE.replace(/sur \d+ points/, `sur ${sujet.langueSur ?? POINTS_LANGUE} points`)}` }],
     },
     CORRECTION_SCHEMA,
     onProgress

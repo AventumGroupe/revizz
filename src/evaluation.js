@@ -175,3 +175,19 @@ export function grillePourCorrection(matiere) {
   if (!r) return "";
   return `Grille de la matière (${matiere}) :\n${r.exercices.map((e) => `- ${e.nom} : ${e.criteres}`).join("\n")}`;
 }
+
+// Maîtrise de la langue : note de service « Exigences en matière de maîtrise de la langue à tous les examens »
+// (BO spécial n° 4 du 17 septembre 2026, à partir de la session 2027) : au moins 2 points dans chaque épreuve,
+// y compris en mathématiques et en sciences ; dans les épreuves à dimension rédactionnelle majeure, une copie défaillante
+// sur l'ensemble des aspects de la langue ne peut pas avoir la moyenne. Ailleurs, la perte se limite à cette ligne.
+export const POINTS_LANGUE = 2;
+const REDACTIONNELLES = new Set(["Français", "Histoire-Géographie", "HGGSP", "SES", "EMC", "Philosophie", "HLP", "LLCER", "Langues anciennes"]);
+export const estRedactionnelle = (matiere) => REDACTIONNELLES.has(matiere);
+
+export const GRILLE_LANGUE = `Maîtrise de la langue (ligne à part, sur ${POINTS_LANGUE} points) :
+- Critères : orthographe et grammaire (accords, conjugaison, homophones) ; syntaxe (phrases complètes et bien construites, ponctuation) ; clarté du raisonnement (idées enchaînées, mots de liaison) ; lexique précis et registre adapté (pas de langage familier ni d'abréviations type SMS).
+- Niveaux : très satisfaisant = ${POINTS_LANGUE} (quelques erreurs isolées seulement) ; satisfaisant = 1,5 (erreurs ponctuelles qui ne gênent pas la lecture) ; insuffisant = 0,5 à 1 (erreurs fréquentes, phrases mal construites qui gênent la lecture) ; très insuffisant = 0 (expression qui empêche souvent de comprendre).
+- Juge l'ensemble de la copie, pas chaque faute : une ou deux erreurs isolées ne font pas perdre de points. Les réponses très courtes (date, nombre, mot) ne comptent pas ; un calcul n'est pas jugé sur la langue, mais la phrase de justification ou de conclusion l'est.
+- La langue n'est notée QUE sur cette ligne : ne retire jamais de points de langue dans les questions (pas de double sanction).
+- Relève les erreurs les plus utiles à corriger (8 au plus) : l'extrait fautif tel qu'écrit, sa correction, et la règle en quelques mots.
+- defaillante = true seulement si la copie est défaillante sur l'ensemble des aspects (orthographe, syntaxe et clarté) au point de gêner fortement la compréhension.`;

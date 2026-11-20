@@ -336,7 +336,7 @@ const SUJETS = {
         q("En quoi cet article s'oppose-t-il à la société d'Ancien Régime ?", 4, "Argumenter", "Sous l'Ancien Régime, la société est divisée en **trois ordres inégaux** ; la noblesse et le clergé ont des **privilèges** de naissance. L'article met fin à ces distinctions : seules comptent l'utilité commune.", [{ critere: "Mention des trois ordres ou des privilèges", points: 2 }, { critere: "Lien explicite avec l'article (égalité contre privilèges)", points: 1.5 }, { critere: "Rédaction claire", points: 0.5 }], "Oublier de faire le lien avec le texte."),
       ] },
       { titre: "De la monarchie absolue à la République", type_exercice: "Réponse à une question problématisée", methode: "Introduction : définis les mots du sujet, situe dans le temps, pose la problématique et annonce ton plan. Développement : 2 ou 3 parties, chacune avec une idée expliquée et des exemples précis (dates, acteurs). Conclusion : réponds à la problématique.", document: "", questions: [
-        q("Comment la France passe-t-elle de la monarchie absolue à la République entre 1789 et 1792 ?", 8, "Argumenter", "**Introduction** : monarchie absolue = le roi détient tous les pouvoirs ; République = régime sans roi. Problématique : comment le pouvoir du roi est-il remis en cause jusqu'à disparaître ? Plan en deux parties.\n\n**1. 1789 : la fin de la monarchie absolue.** États généraux, serment du Jeu de paume (20 juin), prise de la Bastille (14 juillet), abolition des privilèges (4 août), DDHC (26 août).\n\n**2. 1791-1792 : l'échec de la monarchie constitutionnelle.** Constitution de 1791, fuite à Varennes (juin 1791) qui fait perdre confiance au roi, guerre et prise des Tuileries (10 août 1792), abolition de la royauté (21 septembre 1792).\n\n**Conclusion** : en trois ans, la souveraineté passe du roi à la nation.", [{ critere: "Introduction : termes définis, problématique, annonce du plan", points: 1.5 }, { critere: "Organisation en parties, ordre logique", points: 1.5 }, { critere: "Connaissances et repères exacts (dates, acteurs, événements)", points: 3 }, { critere: "Notions employées (souveraineté, privilèges, constitution…)", points: 1 }, { critere: "Conclusion qui répond et rédaction claire", points: 1 }], "Raconter sans plan, ou oublier l'introduction et la problématique."),
+        q("Comment la France passe-t-elle de la monarchie absolue à la République entre 1789 et 1792 ?", 6, "Argumenter", "**Introduction** : monarchie absolue = le roi détient tous les pouvoirs ; République = régime sans roi. Problématique : comment le pouvoir du roi est-il remis en cause jusqu'à disparaître ? Plan en deux parties.\n\n**1. 1789 : la fin de la monarchie absolue.** États généraux, serment du Jeu de paume (20 juin), prise de la Bastille (14 juillet), abolition des privilèges (4 août), DDHC (26 août).\n\n**2. 1791-1792 : l'échec de la monarchie constitutionnelle.** Constitution de 1791, fuite à Varennes (juin 1791) qui fait perdre confiance au roi, guerre et prise des Tuileries (10 août 1792), abolition de la royauté (21 septembre 1792).\n\n**Conclusion** : en trois ans, la souveraineté passe du roi à la nation.", [{ critere: "Introduction : termes définis, problématique, annonce du plan", points: 1 }, { critere: "Organisation en parties, ordre logique", points: 1 }, { critere: "Connaissances et repères exacts (dates, acteurs, événements)", points: 2.5 }, { critere: "Notions employées (souveraineté, privilèges, constitution…)", points: 1 }, { critere: "Conclusion qui répond à la problématique", points: 0.5 }], "Raconter sans plan, ou oublier l'introduction et la problématique."),
       ] },
     ],
   },
@@ -352,7 +352,7 @@ const SUJETS = {
       ] },
       { titre: "Problème", type_exercice: "Problème", methode: "Fais un schéma, repère le triangle rectangle, calcule, puis réponds à la question posée par une phrase.", document: "Un écran mesure 80 cm de large et 60 cm de haut. On mesure sa taille par sa diagonale.", questions: [
         q("Calcule la diagonale de l'écran en centimètres.", 5, "Modéliser", "d² = 80² + 60² = 10 000, donc d = 100 cm.", [{ critere: "Triangle rectangle reconnu", points: 1 }, { critere: "Calcul de d²", points: 2 }, { critere: "d = 100 cm", points: 2 }], "Oublier la racine carrée."),
-        q("Une étagère a une profondeur de 70 cm : l'écran posé à plat y entre-t-il sans dépasser ? Explique.", 5, "Raisonner", "Posé à plat, la largeur (80 cm) ou la hauteur (60 cm) est en profondeur : avec 60 cm en profondeur, il entre (60 < 70) ; avec 80 cm, il dépasse.", [{ critere: "Choix des bonnes dimensions", points: 2 }, { critere: "Comparaison avec 70 cm", points: 2 }, { critere: "Conclusion argumentée", points: 1 }], "Comparer la diagonale à la profondeur."),
+        q("Une étagère a une profondeur de 70 cm : l'écran posé à plat y entre-t-il sans dépasser ? Explique.", 3, "Raisonner", "Posé à plat, la largeur (80 cm) ou la hauteur (60 cm) est en profondeur : avec 60 cm en profondeur, il entre (60 < 70) ; avec 80 cm, il dépasse.", [{ critere: "Choix des bonnes dimensions", points: 1 }, { critere: "Comparaison avec 70 cm", points: 1 }, { critere: "Conclusion argumentée", points: 1 }], "Comparer la diagonale à la profondeur."),
       ] },
     ],
   },
@@ -382,8 +382,17 @@ export async function corrigerCopie(_fiche, sujet, reponses, onProgress) {
       commentaire: ratio > 0.7 ? "Réponse complète et juste." : ratio > 0.3 ? "Réponse partielle : compare avec la réponse attendue." : "Il manque l'essentiel : relis la fiche sur ce point.",
     };
   });
+  // Langue (démo) : on repère seulement les phrases sans majuscule ou sans point final.
+  const redigees = reponses.filter((r) => r && r.trim().split(/\s+/).length >= 6);
+  const fautives = redigees.filter((r) => !/^[A-ZÀ-Ý0-9«"]/.test(r.trim()) || !/[.!?»"]$/.test(r.trim()));
+  const erreurs = fautives.slice(0, 3).map((r) => {
+    const t = r.trim();
+    return { extrait: t.slice(0, 60), correction: (t[0].toUpperCase() + t.slice(1)).replace(/[^.!?»"]$/, (c) => c + ".").slice(0, 61), regle: "Une phrase commence par une majuscule et se termine par un point." };
+  });
+  const niveau = !redigees.length || !fautives.length ? "très satisfaisant" : fautives.length < redigees.length / 2 ? "satisfaisant" : "insuffisant";
   return {
     questions: resultats,
+    langue: { niveau, points_obtenus: { "très satisfaisant": 2, satisfaisant: 1.5, insuffisant: 1 }[niveau], commentaire: "Mode démo : seules la majuscule et la ponctuation sont vérifiées. Avec Claude, l'orthographe, la syntaxe et la clarté sont relues.", erreurs, defaillante: false },
     appreciation: "Mode démo : correction simplifiée par mots-clés. Avec Claude, chaque réponse est vraiment lue et notée selon le barème.",
     points_forts: ["Tu as répondu à toutes les questions."],
     a_travailler: ["Justifie chaque réponse avec le vocabulaire du cours."],
