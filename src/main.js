@@ -14,6 +14,7 @@ import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULE
 import { ic } from "./icons.js";
 import { mascotte, bulle, reactionNote, phraseAccueil } from "./mascotte.js";
 import * as jeu from "./jeu.js";
+import * as dose from "./dose.js";
 import { preparerPage, changerType } from "./image.js";
 import { etatPaliers, fichesDuChapitre, SEUILS } from "./paliers.js";
 
@@ -210,7 +211,8 @@ function home() {
   const s = store.getSettings();
   const fiches = store.getFiches();
   const stats = store.getStats();
-  const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
+  const dz = dose.etatDose();
+  const dues = dz.restant;
   const recentes = [...fiches].sort((a, b) => (b.vue || b.cree) - (a.vue || a.cree)).slice(0, 6);
   const avecFiches = getMatieres().filter((m) => fiches.some((f) => f.matiere === m.nom));
   return `
@@ -220,7 +222,7 @@ function home() {
   </header>
   ${(() => {
     const c = ctrl.aVenir()[0];
-    const a = phraseAccueil({ prenom: s.prenom, dues, serie: stats.serie, nbFiches: fiches.length, controle: c ? { matiere: c.matiere, jours: ctrl.joursRestants(c) } : null });
+    const a = phraseAccueil({ prenom: s.prenom, dues, minutes: dz.minutes, doseFinie: dz.finie, serie: stats.serie, nbFiches: fiches.length, controle: c ? { matiere: c.matiere, jours: ctrl.joursRestants(c) } : null });
     return bulle(a.humeur, esc(a.texte), { cls: "accueil" });
   })()}
   ${s.demo ? `<div class="bandeau"><span><b>Mode démo.</b> Réponses préparées à l'avance, sans Claude.${DEMO_ONLY ? " N'importe quelle photo donne la fiche de maths d'exemple." : ""}</span>${DEMO_ONLY ? "" : `<button class="lien" data-go="settings">Me connecter</button>`}</div>` : ""}
@@ -228,11 +230,7 @@ function home() {
   <section class="bloc">
     <h2>Aujourd'hui</h2>
     <div class="carte-jour">
-      ${
-        dues
-          ? `<button class="ligne" data-revision="">${pastilleIcone("cartes", "#2563eb")}<span class="ligne-txt"><b>Cartes à revoir</b><small>${dues} carte${dues > 1 ? "s" : ""} prête${dues > 1 ? "s" : ""}</small></span>${ic("suite", 18, "chevron")}</button>`
-          : `<div class="ligne">${pastilleIcone("fait", "#0f9d58")}<span class="ligne-txt"><b>Cartes à jour</b><small>Rien à revoir pour l'instant</small></span></div>`
-      }
+      ${ligneDose(dz)}
       ${controlesAccueil()}
     </div>
   </section>
@@ -258,6 +256,18 @@ function home() {
           <button class="btn primary big-btn" data-scan="">${ic("camera", 20)} Scanner une fiche</button>
         </section>`
   }`;
+}
+// Cartes du jour : une dose courte, jamais le stock entier.
+function ligneDose(dz) {
+  if (dz.restant)
+    return `<button class="ligne" data-revision="">${pastilleIcone("cartes", "#2563eb")}<span class="ligne-txt"><b>Cartes du jour</b><small>${dz.restant} carte${dz.restant > 1 ? "s" : ""} · environ ${dz.minutes} min${dz.faites ? ` · ${dz.faites} déjà faite${dz.faites > 1 ? "s" : ""}` : ""}</small>${
+      dz.faites ? `<span class="mini-barre"><i style="width:${Math.round((dz.faites / (dz.faites + dz.restant)) * 100)}%"></i></span>` : ""
+    }</span>${ic("suite", 18, "chevron")}</button>`;
+  if (dz.finie)
+    return `<div class="ligne">${pastilleIcone("fait", "#0f9d58")}<span class="ligne-txt"><b>Cartes du jour : c'est fait</b><small>${dz.faites} cartes revues. Le reste attendra demain.</small></span>${
+      dz.reserve ? `<button class="lien" data-revision="" data-bonus="1">+ ${dose.TAILLE_BONUS} bonus</button>` : ""
+    }</div>`;
+  return `<div class="ligne">${pastilleIcone("fait", "#0f9d58")}<span class="ligne-txt"><b>Cartes à jour</b><small>Rien à revoir pour l'instant</small></span></div>`;
 }
 // Objectif du jour et quêtes du jour (accueil).
 function objectifHTML() {
@@ -288,6 +298,9 @@ function jeuProfilHTML() {
     <div class="nv-tete">${mascotte(nv.niveau >= 5 ? "bravo" : "content", 56)}<div><p class="eyebrow">Niveau ${nv.niveau}</p><h2>${esc(nv.titre)}</h2><p class="gouttes">${goutte()} ${total} gouttes d'encre</p></div></div>
     <div class="obj-barre"><i style="width:${nv.pct}%"></i></div>
     <p class="hint">Encore ${nv.pour - nv.dans} gouttes pour le niveau ${nv.niveau + 1}.</p>
+    <h3>Cartes par jour</h3>
+    <div class="seg">${dose.QUOTAS.map((q) => `<button class="${(Number(store.getSettings().doseCartes) || 15) === q ? "on" : ""}" data-dose="${q}">${q} cartes</button>`).join("")}</div>
+    <p class="hint">Environ ${Math.round(((Number(store.getSettings().doseCartes) || 15) * 20) / 60)} minutes par jour. +10 cartes les 3 jours avant un contrôle.</p>
     <h3>Ma semaine</h3>
     <div class="semaine">${sem
       .map((d) => `<div class="sj ${d.g >= jeu.OBJECTIF_JOUR ? "ok" : ""}"><i style="height:${Math.max(4, Math.round((d.g / max) * 100))}%"></i><small>${JOURS[new Date(d.jour).getDay()]}</small></div>`)
@@ -312,7 +325,7 @@ function carteReprise(f) {
 }
 function ligneMatiere(m, fiches) {
   const siennes = fiches.filter((f) => f.matiere === m.nom);
-  const dues = siennes.reduce((n, f) => n + store.cartesDues(f).length, 0);
+  const dues = siennes.length ? dose.aMontrer((f) => f.matiere === m.nom) : 0;
   return `<button class="ligne" data-matiere="${esc(m.nom)}">
     ${pastille(m.nom, "m")}
     <span class="ligne-txt"><b>${esc(m.nom)}</b><small>${siennes.length ? `${siennes.length} fiche${siennes.length > 1 ? "s" : ""}` : "Aucune fiche"}</small></span>
@@ -344,7 +357,7 @@ function grilleMatieres(fiches) {
     .filter((m) => m.nom !== "Autre" || fiches.some((f) => f.matiere === "Autre"))
     .map((m) => {
       const siennes = fiches.filter((f) => f.matiere === m.nom);
-      const dues = siennes.reduce((n, f) => n + store.cartesDues(f).length, 0);
+      const dues = siennes.length ? dose.aMontrer((f) => f.matiere === m.nom) : 0;
       return `<button class="tuile ${siennes.length ? "" : "vide"}" data-matiere="${esc(m.nom)}">
         ${pastille(m.nom, "l")}
         <b>${esc(m.nom)}</b>
@@ -409,7 +422,7 @@ function ouvrirAjoutMatiere(apresAjout) {
 }
 function carteFiche(f, avecMatiere = false) {
   const m = store.maitrise(f);
-  const d = store.cartesDues(f).length;
+  const d = dose.aMontrer((x) => x.id === f.id);
   return `
   <button class="fiche" data-open="${f.id}">
     ${avecMatiere ? pastille(f.matiere, "m") : ""}
@@ -442,7 +455,7 @@ function matiereView() {
     </section>
     ${nom !== "Autre" ? `<button class="btn ghost big-btn" data-retirer="${esc(nom)}">Retirer ${esc(nom)} de mes matières</button>` : ""}`;
   }
-  const dues = fiches.reduce((n, f) => n + store.cartesDues(f).length, 0);
+  const dues = dose.aMontrer((f) => f.matiere === nom);
   // Regroupe par chapitre ; les chapitres sont triés par ordre alphabétique, les fiches par date.
   const chapitres = {};
   for (const f of fiches) (chapitres[f.chapitre || "Sans chapitre"] ||= []).push(f);
@@ -1020,12 +1033,13 @@ function tabCartes(f) {
   if (!session || session.ficheId !== f.id) {
     return `
     <div class="card center">
-      <div class="big-num">${store.cartesDues(f).length}</div>
+      <div class="big-num">${dose.aMontrer((x) => x.id === f.id)}</div>
       <div>carte(s) à revoir maintenant sur ${f.flashcards.length}</div>
+      ${store.cartesDues(f).length > dose.aMontrer((x) => x.id === f.id) ? `<small class="hint">Les autres attendront les prochains jours : pas besoin de tout faire d'un coup.</small>` : ""}
       <div class="bar wide"><i style="width:${store.maitrise(f)}%"></i></div>
       <small>Maîtrise : ${store.maitrise(f)} %</small>
     </div>
-    <button class="btn primary big-btn" id="start-due" ${store.cartesDues(f).length ? "" : "disabled"}>${ic("jouer", 18)} Réviser les cartes à revoir</button>
+    <button class="btn primary big-btn" id="start-due" ${dose.aMontrer((x) => x.id === f.id) ? "" : "disabled"}>${ic("jouer", 18)} Réviser les cartes à revoir</button>
     <button class="btn secondary big-btn" id="start-all">${ic("melanger", 18)} Tout réviser (mélangé)</button>
     <button class="btn ghost big-btn" id="more-cards">${ic("plus", 18)} 10 cartes de plus</button>
     <div id="progress"></div>
@@ -1038,11 +1052,15 @@ function tabCartes(f) {
 }
 function sessionCartes(ficheId, s) {
   if (s.i >= s.cartes.length) {
+    const dz = dose.etatDose();
+    const finie = s.jour && dz.restant === 0;
+    const r = reactionNote(s.cartes.length ? Math.round((s.sues / s.cartes.length) * 20) : 20, `cartes${s.cartes.length}${s.sues}`);
     return `<div class="card center done">
-      <div class="rond-ok">${ic("fait", 34)}</div>
-      <p>Bravo ! ${s.sues} / ${s.cartes.length} cartes sues.</p>
+      ${mascotte(finie ? "bravo" : r.humeur, 84)}
+      <p><b>${s.sues} / ${s.cartes.length} cartes sues.</b></p>
+      <p class="masc-dit">${finie ? (s.bonus ? "Bonus terminé ! Tu peux vraiment t'arrêter là." : "Dose du jour terminée ! Tu peux t'arrêter là, c'est très bien.") : esc(r.texte)}</p>
       <p class="sub">Les cartes ratées reviendront plus vite, les autres plus tard.</p>
-      <button class="btn primary" id="end-session">Terminer</button></div>`;
+      <div class="row"><button class="btn primary" id="end-session">Terminer</button>${finie && dz.reserve ? `<button class="btn secondary" id="bonus-cartes">+ ${dose.TAILLE_BONUS} bonus</button>` : ""}</div></div>`;
   }
   const c = s.cartes[s.i];
   return `
@@ -1062,7 +1080,7 @@ function bindCartes(f) {
   const $ = (id) => document.getElementById(id);
   if (!session || session.ficheId !== f.id) {
     $("start-due").onclick = () => {
-      session = { ficheId: f.id, cartes: shuffle(store.cartesDues(f)), i: 0, retourne: false, sues: 0 };
+      session = { ficheId: f.id, cartes: shuffle(dose.selection(Math.max(dose.quota(), dose.TAILLE_BONUS), (x) => x.id === f.id)), i: 0, retourne: false, sues: 0 };
       render();
     };
     $("start-all").onclick = () => {
@@ -1095,6 +1113,11 @@ function bindCartes(f) {
 function bindSession(s, onEnd) {
   const $ = (id) => document.getElementById(id);
   $("end-session").onclick = onEnd;
+  if ($("bonus-cartes"))
+    $("bonus-cartes").onclick = () => {
+      Object.assign(s, { cartes: shuffle(dose.selection(dose.TAILLE_BONUS, s.ficheId ? (f) => f.id === s.ficheId : undefined)), i: 0, retourne: false, sues: 0, bonus: true });
+      render();
+    };
   if (s.i >= s.cartes.length) return;
   const flip = () => {
     s.retourne = !s.retourne;
@@ -1106,10 +1129,11 @@ function bindSession(s, onEnd) {
     const c = s.cartes[s.i];
     const fiche = store.getFiche(c.ficheId || s.ficheId);
     const vraie = fiche.flashcards.find((x) => x.id === c.id);
+    const nouvelle = vraie && !vraie.prochaine;
     if (vraie) store.noterCarte(vraie, sue);
     store.saveFiche(fiche);
     store.enregistrerActivite("carte");
-    jeu.gagner(sue ? 2 : 1, sue ? { carte: 1, carte_sue: 1 } : { carte: 1 });
+    jeu.gagner(sue ? 2 : 1, { carte: 1, ...(sue ? { carte_sue: 1 } : {}), ...(nouvelle ? { carte_nouvelle: 1 } : {}) });
     if (sue) s.sues++;
     s.i++;
     s.retourne = false;
@@ -1127,10 +1151,15 @@ function revision() {
       .getFiches()
       .filter((f) => !ui.revMatiere || f.matiere === ui.revMatiere)
       .filter((f) => !ui.revChapitre || (f.chapitre || "Sans chapitre") === ui.revChapitre);
-    let cartes = fiches.flatMap((f) => store.cartesDues(f).map((c) => ({ ...c, ficheId: f.id })));
-    // Révision d'un chapitre (palier 1) : s'il n'y a rien à revoir, on passe toutes ses cartes.
-    if (!cartes.length && ui.revChapitre) cartes = fiches.flatMap((f) => f.flashcards.map((c) => ({ ...c, ficheId: f.id })));
-    sessionJour = { cartes: shuffle(cartes).slice(0, 40), i: 0, retourne: false, sues: 0 };
+    const ids = new Set(fiches.map((f) => f.id));
+    const filtre = (f) => ids.has(f.id);
+    // Révision du jour : la dose restante (ou un petit bonus quand elle est finie), cartes prioritaires d'abord.
+    const restant = ui.revChapitre ? 0 : dose.etatDose(ui.revMatiere ? filtre : undefined).restant;
+    const taille = restant || (ui.revChapitre ? 20 : dose.TAILLE_BONUS);
+    let cartes = dose.selection(taille, filtre);
+    // Révision d'un chapitre (palier 1) : s'il n'y a rien à revoir, on passe ses cartes, 20 à la fois.
+    if (!cartes.length && ui.revChapitre) cartes = shuffle(fiches.flatMap((f) => f.flashcards.map((c) => ({ ...c, ficheId: f.id })))).slice(0, 20);
+    sessionJour = { cartes: shuffle(cartes), i: 0, retourne: false, sues: 0, jour: !ui.revChapitre, bonus: !restant };
   }
   return `<header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title">${ui.revMatiere ? `<small>${pastille(ui.revMatiere, "s")} ${esc(ui.revMatiere)}</small>` : ""}${ui.revChapitre ? esc(ui.revChapitre) : "Révision du jour"}</div><span></span></header>
   ${sessionCartes(null, sessionJour)}`;
@@ -1787,6 +1816,7 @@ function consoHTML() {
   </div>`;
 }
 afterRender.settings = () => {
+  document.querySelectorAll("[data-dose]").forEach((b) => (b.onclick = () => (store.saveSettings({ doseCartes: +b.dataset.dose }), render())));
   const $ = (id) => document.getElementById(id);
   bindSauvegarde();
   if ($("reset-conso"))

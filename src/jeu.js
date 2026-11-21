@@ -39,8 +39,8 @@ export const aujourdhui = () => totaux(etat(), jour());
 // ---------- Quêtes du jour (3 par jour, les mêmes sur tous les appareils) ----------
 const QUETES = [
   { id: "cartes10", txt: "Revoir 10 cartes", c: "carte", but: 10 },
-  { id: "cartes20", txt: "Revoir 20 cartes", c: "carte", but: 20 },
-  { id: "sues8", txt: "Savoir 8 cartes", c: "carte_sue", but: 8 },
+  { id: "cartes5", txt: "Revoir 5 cartes", c: "carte", but: 5 },
+  { id: "sues6", txt: "Savoir 6 cartes", c: "carte_sue", but: 6 },
   { id: "qcm1", txt: "Terminer un QCM", c: "qcm", but: 1 },
   { id: "qcm16", txt: "Avoir 16/20 ou plus à un QCM", c: "qcm16", but: 1 },
   { id: "prof2", txt: "Poser 2 questions au prof", c: "prof", but: 2 },

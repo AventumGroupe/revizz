@@ -80,13 +80,14 @@ export function reactionNote(note, graine = "") {
 }
 
 /** Phrase d'accueil selon la journée de l'élève. */
-export function phraseAccueil({ prenom, dues, serie, nbFiches, controle }) {
+export function phraseAccueil({ prenom, dues, minutes, doseFinie, serie, nbFiches, controle }) {
   const p = prenom ? ` ${prenom}` : "";
   if (!nbFiches) return { humeur: "salut", texte: `Salut${p} ! Moi c'est Gribouille, ton prof de poche. Montre-moi un cours en photo et je m'occupe du reste.` };
   if (controle && controle.jours <= 1)
     return { humeur: "reflechit", texte: controle.jours === 0 ? `C'est le jour du contrôle de ${controle.matiere}. Tu es prêt, respire un bon coup.` : `Contrôle de ${controle.matiere} demain : une dernière relecture et au lit tôt !` };
-  if (serie >= 3 && dues) return { humeur: "bravo", texte: `${serie} jours d'affilée${p} ! Ne casse pas la série : ${dues} carte${dues > 1 ? "s" : ""} t'attend${dues > 1 ? "ent" : ""}.` };
-  if (dues) return { humeur: "salut", texte: choisir([`Salut${p} ! ${dues} carte${dues > 1 ? "s" : ""} à revoir aujourd'hui. Cinq minutes et c'est plié.`, `Coucou${p} ! Tes cartes s'impatientent : ${dues} à revoir.`], `${prenom}${dues}`) };
+  if (doseFinie) return { humeur: "bravo", texte: choisir([`Cartes du jour bouclées${p} ! Le reste peut attendre demain.`, `Dose du jour terminée${p}. Ton cerveau te remercie.`], prenom || "x") };
+  if (serie >= 3 && dues) return { humeur: "bravo", texte: `${serie} jours d'affilée${p} ! ${minutes} petites minutes de cartes et la série continue.` };
+  if (dues) return { humeur: "salut", texte: choisir([`Salut${p} ! Environ ${minutes} minutes de cartes aujourd'hui, et c'est plié.`, `Coucou${p} ! Ta dose du jour : ${dues} cartes, à peu près ${minutes} minutes.`], `${prenom}${dues}`) };
   if (controle) return { humeur: "content", texte: `Contrôle de ${controle.matiere} dans ${controle.jours} jours. Le programme du jour est prêt.` };
   return { humeur: "content", texte: choisir([`Tout est à jour${p}. Un petit QCM pour garder la forme ?`, `Rien d'urgent aujourd'hui${p}. Tu peux scanner ton dernier cours ?`, `Cartes à jour, bravo${p}. Je fais une sieste… non, je plaisante, je reste là.`], prenom || "x") };
 }
