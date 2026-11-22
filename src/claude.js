@@ -119,7 +119,7 @@ function explainError(err) {
     return new Error(
       getSettings().connexion === "cle"
         ? `Clé API refusée par Claude (clé enregistrée : ${nettoyerCle(getSettings().apiKey).slice(0, 10)}…, ${nettoyerCle(getSettings().apiKey).length} caractères). Vérifie qu'elle est complète, ou passe plutôt par un compte élève (Profil) : la clé reste alors sur le serveur.`
-        : "Le serveur Révizz refuse la clé API : vérifie ANTHROPIC_API_KEY dans Netlify."
+        : "Accès refusé par le site Révizz : soit le projet Netlify est en accès privé (clique sur « Make public » dans Netlify), soit la clé ANTHROPIC_API_KEY enregistrée dans Netlify est refusée."
     );
   if (err instanceof Anthropic.NotFoundError && getSettings().connexion !== "cle") return new Error("Adresse du site Révizz introuvable : vérifie-la dans les Réglages ⚙️.");
   if (err instanceof Anthropic.PermissionDeniedError) return new Error("Cette clé n'a pas accès à ce modèle. Essaie un autre modèle dans les Réglages.");

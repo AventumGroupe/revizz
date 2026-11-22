@@ -42,6 +42,9 @@ async function appel(action, { corps, methode = "POST", jeton, serveur } = {}) {
   }
   if (r.status === 404 && !(await r.clone().json().catch(() => null))?.erreur) throw new Error("Le site Révizz n'a pas encore les comptes : mets-le à jour sur Netlify.");
   const d = await r.json().catch(() => ({}));
+  // 401 ou 403 sans message de Révizz : c'est Netlify qui bloque (projet en accès privé).
+  if ((r.status === 401 || r.status === 403) && !d.erreur)
+    throw new Error("Le site Révizz est en accès privé sur Netlify : le téléphone est refusé avant d'arriver à Révizz. Dans Netlify, ouvre le projet et clique sur « Make public ».");
   if (!r.ok) throw new Error(d.erreur || `Erreur ${r.status} du site Révizz`);
   return d;
 }

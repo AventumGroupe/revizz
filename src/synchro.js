@@ -93,7 +93,11 @@ async function appel(methode, corps, rev) {
     }
     r = new Response(corpsRep, { status: n.status, headers: entetes });
   }
-  if (r.status === 401) throw new Error(s.connexion === "compte" ? "Session expirée : reconnecte-toi dans le Profil." : "Code famille refusé par le serveur.");
+  if (r.status === 401 || r.status === 403) {
+    const d = await r.clone().json().catch(() => ({}));
+    if (!d.erreur) throw new Error("Le site Révizz est en accès privé sur Netlify : clique sur « Make public » dans Netlify.");
+    throw new Error(s.connexion === "compte" ? "Session expirée : reconnecte-toi dans le Profil." : "Code famille refusé par le serveur.");
+  }
   if (r.status === 404) throw new Error("Le site Révizz n'a pas encore la synchronisation : mets-le à jour sur Netlify.");
   return r;
 }
