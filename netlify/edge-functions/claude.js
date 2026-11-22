@@ -42,9 +42,11 @@ const erreur = (status, message, cors) =>
 export default async (req) => {
   const cors = entetesCors(req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-  if (req.method !== "POST") return erreur(405, "Méthode non autorisée.", cors);
+  if (req.method !== "POST" && !(req.method === "GET" && new URL(req.url).pathname.endsWith("/diagnostic"))) return erreur(405, "Méthode non autorisée.", cors);
 
-  const cle = Netlify.env.get("ANTHROPIC_API_KEY");
+  // Une clé collée dans Netlify garde parfois un espace, un retour à la ligne ou des guillemets : on les retire.
+  const cleBrute = Netlify.env.get("ANTHROPIC_API_KEY") || "";
+  const cle = cleBrute.replace(/[\s"'«»`]/g, "");
   const code = Netlify.env.get("REVIZZ_CODE");
   if (!cle || !code) return erreur(500, "Serveur Révizz pas encore configuré (clé API ou code famille manquant).", cors);
   // Accès : code famille, ou jeton d'un compte élève connecté.
@@ -52,8 +54,26 @@ export default async (req) => {
   const autorise = jeton ? !!(await verifier(jeton, secretSite((k) => Netlify.env.get(k)))) : memeCode(req.headers.get("x-revizz-code") || "", code);
   if (!autorise) return erreur(401, jeton ? "Session expirée : reconnecte-toi dans le Profil." : "Code famille incorrect.", cors);
 
-  // Seule la création de messages est relayée, avec les modèles de l'appli.
   const url = new URL(req.url);
+  // Diagnostic (réservé à la famille) : la clé du serveur est-elle bien enregistrée et acceptée par Anthropic ?
+  if (url.pathname.endsWith("/diagnostic")) {
+    let anthropic = null;
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: { "x-api-key": cle, "anthropic-version": "2023-06-01" } });
+      const d = await r.json().catch(() => ({}));
+      anthropic = { status: r.status, message: d?.error?.message || "" };
+    } catch (e) {
+      anthropic = { status: 0, message: String(e?.message || e) };
+    }
+    return new Response(
+      JSON.stringify({
+        cle: { longueur: cle.length, prefixeOk: cle.startsWith("sk-ant-"), nettoyee: cleBrute !== cle },
+        anthropic,
+      }),
+      { status: 200, headers: { ...cors, "content-type": "application/json" } }
+    );
+  }
+  // Seule la création de messages est relayée, avec les modèles de l'appli.
   if (!url.pathname.endsWith("/v1/messages")) return erreur(404, "Adresse inconnue.", cors);
   let corps;
   try {

@@ -580,3 +580,8 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .compte-ligne > div { display: grid; gap: 2px; } .compte-ligne small { color: var(--muted); }
 .voir-mdp { display: flex; gap: 8px; align-items: center; font-size: .9rem; color: var(--muted); margin: 4px 0 10px; }
 .voir-mdp input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--primary); }
+
+.diag { display: grid; gap: 8px; }
+.diag-ligne { display: flex; gap: 10px; align-items: flex-start; }
+.diag-ligne > div { display: grid; gap: 2px; min-width: 0; } .diag-ligne small { color: var(--muted); overflow-wrap: anywhere; }
+.diag-ligne.ok svg { color: var(--good); } .diag-ligne.ko svg { color: var(--bad); }

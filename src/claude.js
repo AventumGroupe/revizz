@@ -770,6 +770,62 @@ async function discuterClaude(fiche, history, onProgress) {
   return run({ ...baseParams({ effort: "low", maxTokens: 4000, system }), messages }, onProgress);
 }
 
+/**
+ * Diagnostic de connexion, étape par étape, pour comprendre un refus.
+ * Renvoie une liste de { ok, titre, detail } et ne montre jamais une clé en entier.
+ */
+export async function diagnostic() {
+  const s = getSettings();
+  const lignes = [];
+  const ajoute = (ok, titre, detail = "") => lignes.push({ ok, titre, detail });
+  ajoute(true, "Mode de connexion", { cle: "Clé API sur cet appareil", serveur: "Code famille (clé sur le serveur)", compte: `Compte élève (${s.identifiant || "?"})` }[s.connexion] || s.connexion);
+  ajoute(navigator.onLine !== false, "Internet", navigator.onLine === false ? "Le téléphone se dit hors ligne." : "Le téléphone se dit en ligne.");
+  ajoute(true, "Navigateur intégré", navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] || navigator.userAgent.slice(0, 80));
+  if (s.connexion === "cle") {
+    const k = nettoyerCle(s.apiKey);
+    ajoute(k.startsWith("sk-ant-"), "Clé enregistrée", `${k.slice(0, 10)}…${k.slice(-4)} (${k.length} caractères)${k.startsWith("sk-ant-") ? "" : " : une clé Claude commence par sk-ant-"}`);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/models?limit=1", {
+        headers: { "x-api-key": k, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        cache: "no-store",
+      });
+      const brut = await r.text();
+      let msg = "", deClaude = true;
+      try {
+        msg = JSON.parse(brut)?.error?.message || "";
+      } catch {
+        deClaude = false; // une page HTML : la réponse vient d'un filtre, pas de Claude
+        msg = brut.slice(0, 120).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      }
+      const quoi = { 200: "Clé acceptée par Claude", 401: "Claude refuse cette clé (invalide, révoquée ou mal recopiée)", 403: "Accès interdit : la clé n'a pas les droits, ou un filtre (contrôle parental, réseau) bloque Claude", 429: "Trop de demandes ou limite de dépense atteinte" }[r.status] || `Réponse ${r.status}`;
+      ajoute(r.ok, "Réponse de Claude", `${quoi}${msg ? ` · ${msg}` : ""}`);
+      if (!r.ok && !deClaude) ajoute(false, "Piste", "La réponse ne vient pas de Claude : un contrôle parental (Family Link, Samsung Kids) ou un filtre de la box bloque sans doute api.anthropic.com. Le compte élève contourne ce problème : tout passe par revizz.netlify.app.");
+    } catch (e) {
+      ajoute(false, "Réponse de Claude", `Impossible de joindre api.anthropic.com (${e.message}). Un filtre réseau ou un contrôle parental bloque peut-être ce site. Le compte élève passe par revizz.netlify.app à la place.`);
+    }
+    return lignes;
+  }
+  const base = adresseServeur(s);
+  ajoute(!!base, "Adresse du site", base || "manquante");
+  if (!base) return lignes;
+  const entetes = s.connexion === "compte" ? { "x-revizz-jeton": s.jeton } : { "x-revizz-code": String(s.code || "").trim() };
+  try {
+    const r = await fetch(`${base}/api/claude/diagnostic`, { headers: entetes, cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      ajoute(false, "Site Révizz", d?.error?.message || (r.status === 405 ? "Le site n'a pas encore le diagnostic : remets-le en ligne sur Netlify." : `Réponse ${r.status}`));
+      return lignes;
+    }
+    ajoute(true, "Site Révizz", s.connexion === "compte" ? "Compte reconnu" : "Code famille accepté");
+    ajoute(d.cle?.prefixeOk && d.cle?.longueur > 40, "Clé enregistrée sur Netlify", `${d.cle?.longueur || 0} caractères${d.cle?.prefixeOk ? "" : ", ne commence pas par sk-ant-"}${d.cle?.nettoyee ? " (des espaces ou guillemets ont été retirés automatiquement)" : ""}`);
+    const a = d.anthropic || {};
+    ajoute(a.status === 200, "Claude accepte la clé du serveur", a.status === 200 ? "Oui" : `Non (${a.status}) ${a.message || ""}`);
+  } catch (e) {
+    ajoute(false, "Site Révizz", `Impossible de joindre ${base} (${e.message})`);
+  }
+  return lignes;
+}
+
 async function testerCleClaude() {
   return run({ ...baseParams({ effort: "low", maxTokens: 1000, system: "Réponds en un mot." }), messages: [{ role: "user", content: "OK ?" }] });
 }

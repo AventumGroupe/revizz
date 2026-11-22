@@ -2001,10 +2001,21 @@ afterRender.settings = () => {
   if ($("test")) $("test").onclick = async (e) => {
     save();
     e.target.disabled = true;
-    const p = progressUI($("progress"), "Je contacte Claude…");
+    const p = progressUI($("progress"), "Je vérifie la connexion étape par étape…");
     try {
-      await ai.testerCle();
-      $("progress").innerHTML = `<div class="success">${ic("fait", 18)} Connexion à Claude réussie</div>`;
+      const lignes = await ai.diagnostic();
+      const rapport = lignes.map((l) => `${l.ok ? "OK" : "PROBLÈME"} · ${l.titre} : ${l.detail}`).join("\n");
+      $("progress").innerHTML = `<div class="card diag">${lignes
+        .map((l) => `<div class="diag-ligne ${l.ok ? "ok" : "ko"}">${ic(l.ok ? "ok" : "fermer", 16)}<div><b>${esc(l.titre)}</b><small>${esc(l.detail)}</small></div></div>`)
+        .join("")}<button class="btn secondary big-btn" id="copier-diag">Copier le rapport</button></div>`;
+      $("copier-diag").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(rapport);
+          toast("Rapport copié");
+        } catch {
+          toast("Copie impossible : fais une capture d'écran");
+        }
+      };
     } catch (err) {
       $("progress").innerHTML = `<div class="error">${esc(err.message)}</div>`;
     } finally {
