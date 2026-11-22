@@ -18,10 +18,25 @@ export const MODELS = [
 const SUPPORTS_FALLBACK = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
 
 // Adresse du site Révizz : celle saisie, sinon (version web) le site lui-même, sinon celle fixée à la compilation.
+/** « revizz.netlify.app/ », « http://revizz.netlify.app » … → « https://revizz.netlify.app ». */
+export function normaliserAdresse(v) {
+  let t = String(v || "").trim().replace(/\s+/g, "");
+  if (!t) return "";
+  if (!/^https?:\/\//i.test(t)) t = "https://" + t;
+  try {
+    const u = new URL(t);
+    // Un site Netlify est toujours en https ; un téléphone refuse souvent le http.
+    if (u.hostname !== "localhost" && !/^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)) u.protocol = "https:";
+    return u.origin;
+  } catch {
+    return t.replace(/\/+$/, "");
+  }
+}
+export const ADRESSE_PAR_DEFAUT = normaliserAdresse(import.meta.env.VITE_REVIZZ_SERVEUR || "");
 export function adresseServeur(s = getSettings()) {
-  if (s.serveur) return s.serveur.trim().replace(/\/+$/, "");
+  if (s.serveur) return normaliserAdresse(s.serveur);
   if (!Capacitor.isNativePlatform() && /^https?:$/.test(location.protocol)) return location.origin;
-  return (import.meta.env.VITE_REVIZZ_SERVEUR || "").replace(/\/+$/, "");
+  return ADRESSE_PAR_DEFAUT;
 }
 /** L'appli peut-elle appeler Claude ? (démo, clé personnelle, ou serveur + code famille) */
 export function estConfigure(s = getSettings()) {

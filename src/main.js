@@ -2011,7 +2011,7 @@ afterRender.settings = () => {
         apiKey: ai.nettoyerCle($("apikey").value),
         code: $("code").value.trim(),
         // On ne mémorise l'adresse que si elle diffère de celle trouvée automatiquement.
-        serveur: serveur && serveur !== ai.adresseServeur({ serveur: "" }) ? serveur : "",
+        serveur: serveur && ai.normaliserAdresse(serveur) !== ai.adresseServeur({ serveur: "" }) ? ai.normaliserAdresse(serveur) : "",
         model: $("model").value,
       });
     }

@@ -4,6 +4,7 @@
 // le serveur ne lit pas les fiches, il garde seulement un numéro de version pour éviter qu'un appareil écrase l'autre.
 import { getStore } from "@netlify/blobs";
 import { verifier, secretSite, memeTexte, entetesCors as cors0 } from "../shared/jeton.mjs";
+import { entetesCors as entetesCorsCommun } from "../shared/jeton.mjs";
 
 const TAILLE_MAX = 5_500_000; // limite des fonctions Netlify : environ 6 Mo par requête
 
@@ -12,7 +13,7 @@ const entetesCors = (req) => cors0(req, env, "GET, PUT, OPTIONS");
 
 const json = (status, corps, cors) => new Response(JSON.stringify(corps), { status, headers: { ...cors, "content-type": "application/json" } });
 
-export default async (req) => {
+async function traiter(req) {
   const cors = entetesCors(req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   const code = process.env.REVIZZ_CODE;
@@ -57,6 +58,17 @@ export default async (req) => {
   }
 
   return json(405, { erreur: "Méthode non autorisée." }, cors);
+};
+
+
+// Toute erreur imprévue renvoie quand même les en-têtes CORS : l'appli peut afficher le vrai message.
+export default async (req) => {
+  try {
+    return await traiter(req);
+  } catch (e) {
+    const cors = entetesCorsCommun(req, (k) => process.env[k], "GET, PUT, OPTIONS");
+    return new Response(JSON.stringify({ erreur: `Erreur du serveur Révizz : ${e?.message || e}` }), { status: 500, headers: { ...cors, "content-type": "application/json" } });
+  }
 };
 
 export const config = { path: "/api/sync" };

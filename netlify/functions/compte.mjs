@@ -7,6 +7,7 @@
 import { getStore } from "@netlify/blobs";
 import { scrypt, randomBytes, timingSafeEqual, randomUUID } from "node:crypto";
 import { signer, verifier, secretSite, memeTexte, entetesCors } from "../shared/jeton.mjs";
+import { entetesCors as entetesCorsCommun } from "../shared/jeton.mjs";
 
 const env = (k) => process.env[k];
 const IDENT = /^[a-z0-9][a-z0-9._-]{2,29}$/;
@@ -27,7 +28,7 @@ async function verifierMdp(mdp, compte) {
 const normaliser = (s) => String(s || "").trim().toLowerCase();
 const mdpValide = (m) => typeof m === "string" && m.length >= 8 && m.length <= 200;
 
-export default async (req) => {
+async function traiter(req) {
   const cors = entetesCors(req, env, "GET, POST, OPTIONS");
   const json = (status, corps) => new Response(JSON.stringify(corps), { status, headers: { ...cors, "content-type": "application/json" } });
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -105,6 +106,17 @@ export default async (req) => {
   }
 
   return json(404, { erreur: "Action inconnue." });
+};
+
+
+// Toute erreur imprévue renvoie quand même les en-têtes CORS : l'appli peut afficher le vrai message.
+export default async (req) => {
+  try {
+    return await traiter(req);
+  } catch (e) {
+    const cors = entetesCorsCommun(req, (k) => process.env[k], "GET, POST, OPTIONS");
+    return new Response(JSON.stringify({ erreur: `Erreur du serveur Révizz : ${e?.message || e}` }), { status: 500, headers: { ...cors, "content-type": "application/json" } });
+  }
 };
 
 export const config = { path: "/api/compte/*" };
