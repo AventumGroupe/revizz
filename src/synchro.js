@@ -25,7 +25,8 @@ const majEtat = (e) => {
 
 /** La synchro est possible : connexion par le site Révizz avec un code famille, hors démo. */
 export function disponible(s = getSettings()) {
-  return !s.demo && s.connexion !== "cle" && !!s.code && !!adresseServeur(s) && typeof CompressionStream !== "undefined";
+  const acces = s.connexion === "compte" ? !!s.jeton : s.connexion !== "cle" && !!s.code;
+  return !s.demo && acces && !!adresseServeur(s) && typeof CompressionStream !== "undefined";
 }
 export const active = (s = getSettings()) => disponible(s) && s.synchro !== false;
 export const activer = (oui) => saveSettings({ synchro: !!oui });
@@ -52,11 +53,11 @@ const signature = (d) => JSON.stringify(CLES.map((k) => d[k] ?? null));
 
 async function appel(methode, corps, rev) {
   const s = getSettings();
-  const headers = { "x-revizz-code": s.code };
+  const headers = s.connexion === "compte" ? { "x-revizz-jeton": s.jeton } : { "x-revizz-code": s.code };
   if (rev !== undefined) headers["x-revizz-rev"] = String(rev);
   if (corps) headers["content-type"] = "application/octet-stream";
   const r = await fetch(`${adresseServeur(s)}/api/sync`, { method: methode, headers, body: corps, cache: "no-store" });
-  if (r.status === 401) throw new Error("Code famille refusé par le serveur.");
+  if (r.status === 401) throw new Error(s.connexion === "compte" ? "Session expirée : reconnecte-toi dans le Profil." : "Code famille refusé par le serveur.");
   if (r.status === 404) throw new Error("Le site Révizz n'a pas encore la synchronisation : mets-le à jour sur Netlify.");
   return r;
 }

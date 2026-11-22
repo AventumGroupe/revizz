@@ -5,6 +5,8 @@
 //   REVIZZ_CODE        : le code famille, saisi une fois sur chaque appareil
 //   REVIZZ_ORIGINES    : (facultatif) autres adresses autorisées, séparées par des virgules
 
+import { verifier, secretSite } from "../shared/jeton.mjs";
+
 const MODELES = new Set(["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]);
 const MAX_TOKENS = 64000;
 
@@ -45,7 +47,10 @@ export default async (req) => {
   const cle = Netlify.env.get("ANTHROPIC_API_KEY");
   const code = Netlify.env.get("REVIZZ_CODE");
   if (!cle || !code) return erreur(500, "Serveur Révizz pas encore configuré (clé API ou code famille manquant).", cors);
-  if (!memeCode(req.headers.get("x-revizz-code") || "", code)) return erreur(401, "Code famille incorrect.", cors);
+  // Accès : code famille, ou jeton d'un compte élève connecté.
+  const jeton = req.headers.get("x-revizz-jeton");
+  const autorise = jeton ? !!(await verifier(jeton, secretSite((k) => Netlify.env.get(k)))) : memeCode(req.headers.get("x-revizz-code") || "", code);
+  if (!autorise) return erreur(401, jeton ? "Session expirée : reconnecte-toi dans le Profil." : "Code famille incorrect.", cors);
 
   // Seule la création de messages est relayée, avec les modèles de l'appli.
   const url = new URL(req.url);

@@ -15,6 +15,7 @@ import { ic } from "./icons.js";
 import { mascotte, bulle, reactionNote, phraseAccueil } from "./mascotte.js";
 import * as jeu from "./jeu.js";
 import * as dose from "./dose.js";
+import * as compte from "./compte.js";
 import { preparerPage, changerType } from "./image.js";
 import { etatPaliers, fichesDuChapitre, SEUILS } from "./paliers.js";
 
@@ -158,8 +159,8 @@ function quitterDemo() {
 function render() {
   const s = store.getSettings();
   if (DEMO_ONLY && !s.demo) return entrerDemo();
-  if (!ai.estConfigure(s) && ui.view !== "settings") ui.view = "welcome";
-  const views = { welcome, home, matieres, planning, relecture: relectureView, exos: exosView, defi: defiView, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
+  if (!ai.estConfigure(s) && ui.view !== "settings" && ui.view !== "connexion") ui.view = "welcome";
+  const views = { welcome, connexion: connexionView, home, matieres, planning, relecture: relectureView, exos: exosView, defi: defiView, matiere: matiereView, chapitre: chapitreView, test: testView, controle: controleView, scan, fiche: ficheView, settings, revision };
   const avecNav = VUES_RACINE.includes(ui.view) && ui.view !== "welcome";
   document.body.classList.toggle("avec-nav", avecNav);
   app.innerHTML = views[ui.view]() + (avecNav ? barreNav() : "");
@@ -167,6 +168,64 @@ function render() {
 }
 const afterRender = {};
 afterRender.welcome = () => (document.getElementById("btn-demo").onclick = entrerDemo);
+
+// ---------- Connexion au compte ----------
+let modeCompte = "connexion"; // ou "inscription"
+function connexionView() {
+  const s = store.getSettings();
+  const insc = modeCompte === "inscription";
+  const adresseConnue = !!ai.adresseServeur({ ...s, serveur: "" });
+  return `
+  <header class="top"><button class="icon" data-back aria-label="Retour">${ic("retour", 22)}</button><div class="title">Mon compte</div><span></span></header>
+  ${bulle(insc ? "salut" : "content", insc ? "Créons ton compte : tout ton travail y sera gardé, sur le téléphone comme sur l'ordinateur." : "Content de te revoir ! Connecte-toi pour retrouver tout ton travail.", { taille: 56 })}
+  <div class="seg">${[["connexion", "Se connecter"], ["inscription", "Créer un compte"]].map(([k, l]) => `<button class="${modeCompte === k ? "on" : ""}" data-mode-compte="${k}">${l}</button>`).join("")}</div>
+  <form id="form-compte" class="card" autocomplete="on">
+    ${adresseConnue ? "" : `<label class="field">Adresse du site Révizz<input id="cx-serveur-url" type="url" inputmode="url" value="${esc(s.serveur || "")}" placeholder="https://revizz-famille.netlify.app" autocomplete="off" required></label>`}
+    <label class="field">Identifiant<input id="cx-ident" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(s.identifiant || "")}" placeholder="ex : lucas.m" required></label>
+    <label class="field">Mot de passe<input id="cx-mdp" type="password" autocomplete="${insc ? "new-password" : "current-password"}" minlength="${insc ? 8 : 1}" required></label>
+    ${
+      insc
+        ? `<label class="field">Confirme le mot de passe<input id="cx-mdp2" type="password" autocomplete="new-password" required></label>
+           <label class="field">Code famille <small>(demande-le à un parent)</small><input id="cx-code" type="password" autocomplete="off" required></label>
+           <p class="hint">Identifiant : lettres minuscules, chiffres, point ou tiret. Mot de passe : 8 caractères au moins.</p>`
+        : ""
+    }
+    <label class="voir-mdp"><input type="checkbox" id="cx-voir"> Afficher le mot de passe</label>
+    <button class="btn primary big-btn" id="cx-ok">${insc ? "Créer mon compte" : "Me connecter"}</button>
+    <div id="cx-msg"></div>
+  </form>
+  ${insc ? "" : `<p class="hint center">Mot de passe oublié ? Un parent peut le réinitialiser dans l'Espace parent, avec le code famille.</p>`}`;
+}
+afterRender.connexion = () => {
+  const $ = (id) => document.getElementById(id);
+  document.querySelectorAll("[data-mode-compte]").forEach((b) => (b.onclick = () => ((modeCompte = b.dataset.modeCompte), render())));
+  $("cx-voir").onchange = (e) => document.querySelectorAll("#cx-mdp, #cx-mdp2").forEach((x) => (x.type = e.target.checked ? "text" : "password"));
+  $("form-compte").onsubmit = async (e) => {
+    e.preventDefault();
+    const ident = $("cx-ident").value.trim();
+    const mdp = $("cx-mdp").value;
+    const serveur = $("cx-serveur-url")?.value.trim().replace(/\/+$/, "") || undefined;
+    if (modeCompte === "inscription" && mdp !== $("cx-mdp2").value) return ($("cx-msg").innerHTML = `<div class="error">Les deux mots de passe ne sont pas identiques.</div>`);
+    $("cx-ok").disabled = true;
+    $("cx-msg").innerHTML = "";
+    try {
+      if (store.getSettings().demo) quitterDemo();
+      if (modeCompte === "inscription") await compte.inscription(ident, mdp, $("cx-code").value, serveur);
+      else await compte.connexion(ident, mdp, serveur);
+      $("cx-msg").innerHTML = `<p class="hint">Connecté ! Je récupère ton travail…</p>`;
+      let n = 0;
+      try {
+        const r = await synchro.synchroniser();
+        n = (r?.bilan?.ajoutees || 0) + (r?.bilan?.majs || 0);
+      } catch {}
+      toast(n ? `Bienvenue ! ${n} fiche${n > 1 ? "s" : ""} récupérée${n > 1 ? "s" : ""}.` : "Bienvenue !");
+      go({ view: "home" });
+    } catch (err) {
+      $("cx-msg").innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      $("cx-ok").disabled = false;
+    }
+  };
+};
 
 // ---------- Accueil (premier lancement) ----------
 function welcome() {
@@ -182,8 +241,9 @@ function welcome() {
       <li>${ic("progres", 20)}<span>Entraîne-toi et suis tes progrès</span></li>
     </ul>
     <div class="welcome-actions">
-      <button class="btn primary big-btn" data-go="settings">Me connecter avec le code famille</button>
-      <button class="btn secondary big-btn" id="btn-demo">Essayer la démo, sans clé</button>
+      <button class="btn primary big-btn" data-go="connexion">Me connecter</button>
+      <button class="btn secondary big-btn" id="btn-demo">Essayer la démo</button>
+      <button class="btn ghost big-btn" data-go="settings">Espace parent (code famille ou clé API)</button>
     </div>
   </div>`;
 }
@@ -310,6 +370,14 @@ function jeuProfilHTML() {
       (b) => `<div class="succes ${obtenus[b.id] ? "gagne" : ""}" title="${esc(b.desc)}"><span class="badge-rond">${ic(b.icone, 22)}</span><b>${esc(b.nom)}</b><small>${esc(b.desc)}</small></div>`
     ).join("")}</div>
   </div>`;
+}
+// Profil : le compte de l'élève.
+function carteCompteHTML(s) {
+  if (compte.estConnecte(s))
+    return `<div class="card compte-carte"><div class="compte-ligne">${ic("profil", 20)}<div><b>${esc(s.identifiant)}</b><small>Ton travail est gardé sur ton compte et synchronisé.</small></div></div>
+      <div class="row"><button class="btn secondary" id="btn-mdp">Changer le mot de passe</button><button class="btn ghost" id="btn-deconnexion">Se déconnecter</button></div></div>`;
+  return `<div class="card compte-carte"><div class="compte-ligne">${ic("profil", 20)}<div><b>Pas de compte connecté</b><small>Avec un compte, tu retrouves tout ton travail sur le téléphone et sur l'ordinateur.</small></div></div>
+    <button class="btn primary big-btn" data-go="connexion">Me connecter ou créer un compte</button></div>`;
 }
 // Petite pastille ronde avec une icône d'interface (pas une matière).
 const pastilleIcone = (icone, couleurHex) => `<span class="pastille pastille-m" style="--c:${couleurHex}">${ic(icone, 18)}</span>`;
@@ -1662,6 +1730,7 @@ function settings() {
   const s = store.getSettings();
   return `
   <header class="page-head"><div><p class="eyebrow">Profil et réglages</p><h1>${s.prenom ? esc(s.prenom) : "Profil"}</h1></div></header>
+  ${DEMO_ONLY ? "" : carteCompteHTML(s)}
   ${jeuProfilHTML()}
   <label class="field">Ton prénom<input id="prenom" value="${esc(s.prenom)}" placeholder="ex : Lucas"></label>
   <label class="field">Ta classe<select id="classe">${CLASSES.map((c) => `<option ${c === s.classe ? "selected" : ""}>${c}</option>`).join("")}</select></label>
@@ -1689,6 +1758,12 @@ function settings() {
       </label>
       <p class="hint">Crée une clé sur <b>platform.claude.com</b> → API Keys. Elle reste sur cet appareil. Pense à fixer une limite de dépense mensuelle dans la console.</p>
     </div>
+    <details class="aide"><summary>Réinitialiser le mot de passe d'un compte élève</summary>
+      <label class="field">Identifiant du compte<input id="re-ident" autocapitalize="none" autocomplete="off"></label>
+      <label class="field">Nouveau mot de passe<input id="re-mdp" type="text" autocomplete="off" placeholder="8 caractères au moins"></label>
+      <label class="field">Code famille<input id="re-code" type="password" autocomplete="off"></label>
+      <button class="btn secondary big-btn" id="re-ok">Réinitialiser</button>
+    </details>
     <label class="field">Modèle<select id="model">${ai.MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select></label>
   </div>`
   }
@@ -1828,7 +1903,49 @@ function consoHTML() {
     <button class="btn ghost" id="reset-conso">Remettre le compteur à zéro</button>
   </div>`;
 }
+let cxTouche = false;
 afterRender.settings = () => {
+  const $$ = (id) => document.getElementById(id);
+  if ($$("btn-deconnexion"))
+    $$("btn-deconnexion").onclick = async () => {
+      if (!(await confirmer("Se déconnecter ? Ton travail reste sur ton compte, mais il sera effacé de cet appareil jusqu'à ta prochaine connexion.", "Se déconnecter"))) return;
+      try {
+        await synchro.synchroniser();
+      } catch (e) {
+        if (!(await confirmer(`La dernière synchronisation a échoué (${e.message}). Le travail fait ici depuis la dernière synchronisation serait perdu. Se déconnecter quand même ?`, "Se déconnecter"))) return;
+      }
+      compte.deconnecter();
+      go({ view: "welcome" });
+    };
+  if ($$("btn-mdp"))
+    $$("btn-mdp").onclick = () =>
+      modale(
+        `<h3>Changer le mot de passe</h3>
+        <label class="field">Mot de passe actuel<input id="m-ancien" type="password" autocomplete="current-password"></label>
+        <label class="field">Nouveau mot de passe<input id="m-nouveau" type="password" autocomplete="new-password" placeholder="8 caractères au moins"></label>
+        <p class="hint">Les autres appareils devront se reconnecter.</p>
+        <button class="btn primary big-btn" id="m-ok">Changer</button><div id="m-msg"></div>`,
+        (box, fermer) =>
+          (box.querySelector("#m-ok").onclick = async () => {
+            try {
+              await compte.changerMotDePasse(box.querySelector("#m-ancien").value, box.querySelector("#m-nouveau").value);
+              fermer();
+              toast("Mot de passe changé");
+            } catch (e) {
+              box.querySelector("#m-msg").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+            }
+          })
+      );
+  if ($$("re-ok"))
+    $$("re-ok").onclick = async () => {
+      try {
+        await compte.reinitialiser($$("re-ident").value.trim(), $$("re-mdp").value, $$("re-code").value);
+        toast("Mot de passe réinitialisé");
+        $$("re-mdp").value = "";
+      } catch (e) {
+        toast(e.message);
+      }
+    };
   document.querySelectorAll("[data-dose]").forEach((b) => (b.onclick = () => (store.saveSettings({ doseCartes: +b.dataset.dose }), render())));
   const $ = (id) => document.getElementById(id);
   bindSauvegarde();
@@ -1837,9 +1954,11 @@ afterRender.settings = () => {
       store.resetConso();
       render();
     };
+  cxTouche = false;
   document.querySelectorAll("[data-cx]").forEach(
     (b) =>
       (b.onclick = () => {
+        cxTouche = true;
         document.querySelectorAll("[data-cx]").forEach((x) => x.classList.toggle("on", x === b));
         $("cx-serveur").hidden = b.dataset.cx !== "serveur";
         $("cx-cle").hidden = b.dataset.cx !== "cle";
@@ -1848,7 +1967,9 @@ afterRender.settings = () => {
   const save = () => {
     const reglages = { prenom: $("prenom").value.trim(), classe: $("classe").value };
     if (!DEMO_ONLY) {
-      const connexion = document.querySelector("[data-cx].on")?.dataset.cx || "serveur";
+      const choisi = document.querySelector("[data-cx].on")?.dataset.cx || "serveur";
+      // Un élève connecté à son compte le reste, sauf si le parent change explicitement de mode.
+      const connexion = compte.estConnecte() && !cxTouche ? "compte" : choisi;
       const serveur = $("serveur").value.trim();
       Object.assign(reglages, {
         connexion,

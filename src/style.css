@@ -576,3 +576,7 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 @media (prefers-reduced-motion: reduce) { .confettis, .combo { animation: none !important; } .confettis { display: none; } }
 .mini-barre { display: block; height: 6px; border-radius: 999px; background: var(--line-2); overflow: hidden; margin-top: 6px; max-width: 180px; }
 .mini-barre i { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
+.compte-ligne { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.compte-ligne > div { display: grid; gap: 2px; } .compte-ligne small { color: var(--muted); }
+.voir-mdp { display: flex; gap: 8px; align-items: center; font-size: .9rem; color: var(--muted); margin: 4px 0 10px; }
+.voir-mdp input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--primary); }

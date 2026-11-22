@@ -25,6 +25,7 @@ export function adresseServeur(s = getSettings()) {
 /** L'appli peut-elle appeler Claude ? (démo, clé personnelle, ou serveur + code famille) */
 export function estConfigure(s = getSettings()) {
   if (s.demo) return true;
+  if (s.connexion === "compte") return !!(s.jeton && adresseServeur(s));
   return s.connexion === "cle" ? !!s.apiKey : !!(s.code && adresseServeur(s));
 }
 
@@ -36,6 +37,10 @@ function client() {
     return new Anthropic({ apiKey: s.apiKey, dangerouslyAllowBrowser: true, maxRetries: 3 });
   }
   const base = adresseServeur(s);
+  if (s.connexion === "compte") {
+    if (!base || !s.jeton) throw new Error("Connecte-toi à ton compte dans le Profil.");
+    return new Anthropic({ apiKey: "relais-revizz", baseURL: `${base}/api/claude`, dangerouslyAllowBrowser: true, maxRetries: 3, defaultHeaders: { "x-revizz-jeton": s.jeton } });
+  }
   if (!base || !s.code) throw new Error("Saisis l'adresse du site Révizz et le code famille dans les Réglages ⚙️.");
   // Serveur Révizz : la vraie clé est sur Netlify ; l'appareil n'envoie que le code famille.
   return new Anthropic({
