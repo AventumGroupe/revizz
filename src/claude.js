@@ -101,7 +101,12 @@ function explainError(err) {
     return new Error("Claude n'a pas pu traiter la demande : " + err.message);
   }
   if (err instanceof Anthropic.InternalServerError) return new Error("Claude est surchargé pour le moment. Réessaie dans un instant.");
-  if (err instanceof Anthropic.APIConnectionError) return new Error("Pas de connexion internet. Vérifie le Wi-Fi ou les données mobiles.");
+  if (err instanceof Anthropic.APIConnectionError)
+    return new Error(
+      navigator.onLine === false
+        ? "Pas de connexion internet. Vérifie le Wi-Fi ou les données mobiles."
+        : `La connexion avec ${getSettings().connexion === "cle" ? "Claude" : "le site Révizz"} a été coupée (envoi trop lourd, appli mise en arrière-plan ou écran en veille). Réessaie en gardant l'appli ouverte ; si ça recommence, scanne moins de pages à la fois.`
+    );
   if (err instanceof Anthropic.APIError) return new Error(`Erreur Claude (${err.status}) : ${err.message}`);
   return err;
 }
@@ -316,10 +321,56 @@ Réponds uniquement avec la transcription.`;
  * pages : [{ kind: "image", mediaType, data, largeur, hauteur, original }] ou [{ kind: "pdf", data }]
  * onZoom(n) : appelé à chaque zoom de Claude (pour l'affichage).
  */
-async function transcrireClaude(pages, { matiere, note, type } = {}, onProgress, onZoom) {
+// Les pages sont lues une par une (un PDF compte pour un envoi) : chaque requête reste légère,
+// ce qui évite les coupures de connexion avec plusieurs photos haute définition, et la lecture avance page après page.
+async function transcrireClaude(pages, opts = {}, onProgress, onZoom) {
+  if (pages.length <= 1) return transcrireLot(pages, opts, onProgress, onZoom, 1, "");
+  const morceaux = [];
+  let deja = 0, zoomsAvant = 0, zoomsLot = 0, numero = 1;
+  for (const p of pages) {
+    zoomsLot = 0;
+    const texte = await transcrireLot(
+      [p],
+      { ...opts, total: pages.length },
+      (chars, acc) => onProgress?.(deja + chars, acc, numero),
+      (n) => onZoom?.(zoomsAvant + (zoomsLot = n)),
+      numero,
+      morceaux.join("\n\n").slice(-600)
+    );
+    morceaux.push(texte);
+    deja += texte.length;
+    zoomsAvant += zoomsLot;
+    numero++;
+  }
+  return morceaux.join("\n\n");
+}
+
+// Appel en flux avec une nouvelle tentative si la connexion saute (réseau mobile, mise en veille…).
+async function fluxAvecReprise(params, onText) {
+  for (let essai = 0; ; essai++) {
+    try {
+      const stream = client().beta.messages.stream(params);
+      let acc = "";
+      stream.on("text", (delta) => {
+        acc += delta;
+        onText?.(acc);
+      });
+      return await stream.finalMessage();
+    } catch (err) {
+      if (err instanceof Anthropic.APIConnectionError && essai < 2) {
+        await new Promise((r) => setTimeout(r, 2000 * (essai + 1)));
+        continue;
+      }
+      throw explainError(err);
+    }
+  }
+}
+
+async function transcrireLot(pages, { matiere, note, type, total } = {}, onProgress, onZoom, premierNumero = 1, contexte = "") {
   const content = [];
+  if (contexte) content.push({ type: "text", text: `Fin de la page précédente (pour le contexte, ne la recopie pas) :\n${contexte}` });
   pages.forEach((p, i) => {
-    content.push({ type: "text", text: p.kind === "pdf" ? `Document PDF (pages suivantes)` : `Page ${i + 1} (${p.largeur} × ${p.hauteur} px)` });
+    content.push({ type: "text", text: p.kind === "pdf" ? `Document PDF (pages suivantes)` : `Page ${premierNumero + i}${total ? ` sur ${total}` : ""} (${p.largeur} × ${p.hauteur} px)` });
     content.push(
       p.kind === "pdf"
         ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: p.data } }
@@ -330,7 +381,7 @@ async function transcrireClaude(pages, { matiere, note, type } = {}, onProgress,
   content.push({
     type: "text",
     text: [
-      `Transcris ${pages.length > 1 ? `ces ${pages.length} pages` : "cette page"} (${type === "imprime" ? "document plutôt imprimé" : "prise de notes manuscrite"}).`,
+      `Transcris ${pages.length > 1 ? `ces ${pages.length} pages` : "cette page"} (${type === "imprime" ? "document plutôt imprimé" : type === "mixte" ? "document imprimé annoté à la main : transcris le texte imprimé ET toutes les annotations manuscrites (marges, mots entourés ou soulignés, compléments, réponses écrites dans les blancs) ; place chaque annotation à l'endroit où elle se rapporte, sous la forme « > Annotation : … », et marque [?…] les mots manuscrits incertains" : "prise de notes manuscrite"}).${premierNumero > 1 || total ? ` Commence par « ## Page ${premierNumero} ». Pour l'outil zoom, cette page est la page 1.` : ""}`,
       `Niveau de l'élève : ${classe || "lycée"}.`,
       matiere ? `Matière : ${matiere}.` : "",
       note ? `Précision de l'élève : ${note}` : "",
@@ -343,20 +394,8 @@ async function transcrireClaude(pages, { matiere, note, type } = {}, onProgress,
   };
   let zooms = 0;
   for (let tour = 0; tour < 8; tour++) {
-    let message;
-    try {
-      const stream = client().beta.messages.stream({ ...params, messages });
-      let chars = 0, acc = "";
-      stream.on("text", (delta) => {
-        chars += delta.length;
-        acc += delta;
-        onProgress?.(chars, acc);
-      });
-      message = await stream.finalMessage();
-      enregistrerConso(message.usage);
-    } catch (err) {
-      throw explainError(err);
-    }
+    const message = await fluxAvecReprise({ ...params, messages }, (acc) => onProgress?.(acc.length, acc));
+    enregistrerConso(message.usage);
     if (message.stop_reason === "refusal") throw new Error("Claude a refusé de traiter ce contenu. Essaie avec une autre fiche.");
     const appels = message.content.filter((b) => b.type === "tool_use");
     if (message.stop_reason !== "tool_use" || !appels.length) {
@@ -413,6 +452,7 @@ async function creerFicheClaude(transcription, { matiere, note } = {}, onProgres
           content: [
             `<transcription>\n${transcription}\n</transcription>`,
             "Voici la transcription d'un cours (photo, souvent manuscrite). Les mots entre [?…] sont des lectures incertaines : vérifie-les par le sens et le programme, et n'en fais pas des flashcards s'ils restent douteux.",
+            "Les lignes « > Annotation : … » sont des notes manuscrites ajoutées sur un document imprimé : intègre-les, elles signalent souvent ce que le professeur a jugé essentiel.",
             "1. Rédige une fiche de révision synthétique : l'essentiel à apprendre, sans recopier la transcription.",
             "2. Ajoute les points clés, le vocabulaire essentiel, une astuce mémo et des flashcards.",
             "3. Propose des sujets connexes adaptés au niveau de l'élève : une notion à revoir avant, une pour approfondir, un lien avec une autre matière.",

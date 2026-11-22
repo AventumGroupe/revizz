@@ -481,7 +481,12 @@ function matiereView() {
 let pages = [];
 let scanNote = "";
 let scanMatiere = ""; // vide = détection automatique
-let typeDoc = store.getSettings().typeDoc || "manuscrit"; // manuscrit (haute précision) ou imprime (économe)
+let typeDoc = store.getSettings().typeDoc || "manuscrit"; // manuscrit (haute précision), imprime (économe) ou mixte (imprimé annoté à la main)
+const AIDE_TYPE = {
+  manuscrit: "Lecture haute précision : photo en haute définition, Claude zoome sur les mots difficiles et signale ceux dont il n'est pas sûr.",
+  imprime: "Lecture économe, pour un polycopié ou un manuel imprimé.",
+  mixte: "Photocopie ou manuel annoté à la main : Claude lit l'imprimé et les notes manuscrites (marges, mots soulignés, compléments), en haute définition.",
+};
 let analyseEnCours = false;
 function scan() {
   const vide = !pages.length;
@@ -492,8 +497,9 @@ function scan() {
       ? `<p class="hint">Comment veux-tu scanner ton cours ?</p>
         <div class="type-doc"><span>Écriture</span><div class="seg" role="group" aria-label="Type de document">
           <button data-type="manuscrit" class="${typeDoc === "manuscrit" ? "on" : ""}">Manuscrite</button>
-          <button data-type="imprime" class="${typeDoc === "imprime" ? "on" : ""}">Imprimée</button></div></div>
-        <p class="hint">${typeDoc === "manuscrit" ? "Lecture haute précision : photo en haute définition, Claude zoome sur les mots difficiles et signale ceux dont il n'est pas sûr." : "Lecture économe, pour un polycopié ou un manuel imprimé."}</p>
+          <button data-type="imprime" class="${typeDoc === "imprime" ? "on" : ""}">Imprimée</button>
+          <button data-type="mixte" class="${typeDoc === "mixte" ? "on" : ""}">Les deux</button></div></div>
+        <p class="hint">${AIDE_TYPE[typeDoc] || AIDE_TYPE.manuscrit}</p>
         <div class="choix-scan">
           <button class="choix" data-scanmode="une"><span class="em">${ic("page", 28)}</span><b>Une page</b><small>Une photo, et c'est prêt.</small></button>
           <button class="choix" data-scanmode="plusieurs"><span class="em">${ic("pages", 28)}</span><b>Plusieurs pages</b><small>Enchaîne les photos sans valider chaque page.</small></button>
@@ -502,8 +508,9 @@ function scan() {
       : `<p class="hint">${pages.length} page${pages.length > 1 ? "s" : ""}. Vérifie l'ordre avec les flèches, puis crée ta fiche.</p>
         <div class="type-doc"><span>Écriture</span><div class="seg" role="group" aria-label="Type de document">
           <button data-type="manuscrit" class="${typeDoc === "manuscrit" ? "on" : ""}">Manuscrite</button>
-          <button data-type="imprime" class="${typeDoc === "imprime" ? "on" : ""}">Imprimée</button></div></div>
-        <p class="hint">${typeDoc === "manuscrit" ? "Lecture haute précision : photo en haute définition, Claude zoome sur les mots difficiles et signale ceux dont il n'est pas sûr." : "Lecture économe, pour un polycopié ou un manuel imprimé."}</p>
+          <button data-type="imprime" class="${typeDoc === "imprime" ? "on" : ""}">Imprimée</button>
+          <button data-type="mixte" class="${typeDoc === "mixte" ? "on" : ""}">Les deux</button></div></div>
+        <p class="hint">${AIDE_TYPE[typeDoc] || AIDE_TYPE.manuscrit}</p>
         <div class="pages">
           ${pages
             .map(
@@ -664,14 +671,19 @@ async function analyser() {
   const btn = document.getElementById("btn-analyser");
   btn.disabled = true;
   const zone = document.getElementById("progress");
-  const p = progressUI(zone, typeDoc === "manuscrit" ? "Je déchiffre l'écriture…" : "Je lis ta fiche…");
+  const p = progressUI(zone, typeDoc === "imprime" ? "Je lis ta fiche…" : "Je déchiffre l'écriture…");
   const lsub = zone.querySelector(".lsub");
   let zooms = 0;
+  // Garde l'écran allumé pendant la lecture : une mise en veille coupe la connexion.
+  let veille = null;
+  try {
+    veille = await navigator.wakeLock?.request("screen");
+  } catch {}
   try {
     const texte = await ai.transcrire(
       pages,
       { matiere: scanMatiere, note: scanNote, type: typeDoc },
-      (chars) => (lsub.textContent = `${zooms ? `${zooms} zoom${zooms > 1 ? "s" : ""} sur les passages difficiles · ` : ""}${Math.round(chars / 5)} mots lus`),
+      (chars, _acc, page) => (lsub.textContent = `${page && pages.length > 1 ? `Page ${page}/${pages.length} · ` : ""}${zooms ? `${zooms} zoom${zooms > 1 ? "s" : ""} · ` : ""}${Math.round(chars / 5)} mots lus`),
       (n) => {
         zooms = n;
         zone.querySelector(".lmsg").textContent = "Je zoome sur les passages difficiles…";
@@ -689,6 +701,7 @@ async function analyser() {
   } finally {
     p.stop();
     analyseEnCours = false;
+    veille?.release?.().catch(() => {});
   }
 }
 

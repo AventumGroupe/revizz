@@ -2,9 +2,9 @@
 // Tout se passe sur le téléphone : rien n'est envoyé tant que l'élève n'a pas lancé l'analyse.
 
 // Taille des images envoyées à Claude (bord le plus long, en pixels).
-// Manuscrit : haute définition (Claude Opus 5.5 lit jusqu'à 2576 px), indispensable pour une écriture fine ou pâle.
+// Manuscrit : haute définition (jusqu'à 2576 px lisibles ; 2200 px gardent l'écriture nette avec un envoi plus léger), indispensable pour une écriture fine ou pâle.
 // Imprimé : 1280 px suffisent et coûtent environ 3 fois moins de tokens.
-export const TAILLES = { manuscrit: 2400, imprime: 1280 };
+export const TAILLES = { manuscrit: 2200, mixte: 2200, imprime: 1280 };
 const TAILLE_ORIGINAL = 3200; // copie gardée en mémoire pour les zooms
 
 const charger = (src) =>
@@ -115,13 +115,13 @@ export function ameliorer(c) {
 /**
  * Prépare une page : version envoyée à Claude + copie haute définition pour les zooms.
  * @param {string} dataUrl photo d'origine
- * @param {"manuscrit"|"imprime"} type
+ * @param {"manuscrit"|"imprime"|"mixte"} type
  */
 export async function preparerPage(dataUrl, type = "manuscrit") {
   const img = await charger(dataUrl);
   const original = ameliorer(dessiner(img, TAILLE_ORIGINAL));
   const envoi = dessiner(original, TAILLES[type] || TAILLES.manuscrit);
-  const out = envoi.toDataURL("image/jpeg", type === "manuscrit" ? 0.88 : 0.8);
+  const out = envoi.toDataURL("image/jpeg", type === "imprime" ? 0.8 : 0.85);
   const apercu = dessiner(envoi, 420).toDataURL("image/jpeg", 0.7);
   return {
     kind: "image",
@@ -163,5 +163,5 @@ export async function zoomer(page, { x0, y0, x1, y1 }) {
 export async function changerType(page, type) {
   const img = await charger(page.original);
   const envoi = dessiner(img, TAILLES[type] || TAILLES.manuscrit);
-  return { ...page, data: envoi.toDataURL("image/jpeg", type === "manuscrit" ? 0.88 : 0.8).split(",")[1], largeur: envoi.width, hauteur: envoi.height };
+  return { ...page, data: envoi.toDataURL("image/jpeg", type === "imprime" ? 0.8 : 0.85).split(",")[1], largeur: envoi.width, hauteur: envoi.height };
 }
