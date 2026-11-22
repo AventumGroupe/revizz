@@ -2,6 +2,7 @@
 // À l'ouverture, au retour dans l'appli et quelques secondes après chaque modification :
 // 1. on récupère la version du serveur ; 2. on la fusionne avec celle de l'appareil (la plus récente gagne fiche par fiche) ;
 // 3. on renvoie le résultat si quelque chose a changé. Les données voyagent compressées.
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { getSettings, saveSettings, lire, ecrire, surModification } from "./store.js";
 import { adresseServeur } from "./claude.js";
 import { CLES, fusionDonnees, donneesLocales, appliquerDonnees } from "./sauvegarde.js";
@@ -56,7 +57,29 @@ async function appel(methode, corps, rev) {
   const headers = s.connexion === "compte" ? { "x-revizz-jeton": s.jeton } : { "x-revizz-code": String(s.code || "").trim() };
   if (rev !== undefined) headers["x-revizz-rev"] = String(rev);
   if (corps) headers["content-type"] = "application/octet-stream";
-  const r = await fetch(`${adresseServeur(s)}/api/sync`, { method: methode, headers, body: corps, cache: "no-store" });
+  const url = `${adresseServeur(s)}/api/sync`;
+  let r;
+  try {
+    r = await fetch(url, { method: methode, headers, body: corps, cache: "no-store" });
+  } catch (e) {
+    // Android : si le navigateur intégré bloque la requête, on passe par la couche réseau native (données en base64).
+    if (!Capacitor.isNativePlatform()) throw e;
+    const b64 = (buf) => btoa(Array.from(new Uint8Array(buf), (c) => String.fromCharCode(c)).join(""));
+    const n = await CapacitorHttp.request({
+      url,
+      method: methode,
+      headers: { ...headers, ...(corps ? { "content-type": "text/plain", "x-revizz-encodage": "base64" } : {}) },
+      data: corps ? b64(corps) : undefined,
+      responseType: methode === "GET" ? "arraybuffer" : "json",
+    });
+    const entetes = Object.fromEntries(Object.entries(n.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
+    let corpsRep = null;
+    if (n.status !== 204) {
+      if (methode === "GET" && n.status === 200 && typeof n.data === "string") corpsRep = Uint8Array.from(atob(n.data), (c) => c.charCodeAt(0));
+      else corpsRep = typeof n.data === "string" ? n.data : JSON.stringify(n.data ?? {});
+    }
+    r = new Response(corpsRep, { status: n.status, headers: entetes });
+  }
   if (r.status === 401) throw new Error(s.connexion === "compte" ? "Session expirée : reconnecte-toi dans le Profil." : "Code famille refusé par le serveur.");
   if (r.status === 404) throw new Error("Le site Révizz n'a pas encore la synchronisation : mets-le à jour sur Netlify.");
   return r;

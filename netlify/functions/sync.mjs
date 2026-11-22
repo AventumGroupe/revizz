@@ -45,7 +45,8 @@ async function traiter(req) {
     // L'appareil dit sur quelle version il s'est basé ; si un autre a écrit entre-temps, il doit refusionner.
     const base = Number(req.headers.get("x-revizz-rev") ?? -1);
     if (base !== rev) return json(409, { erreur: "Version dépassée", rev }, cors);
-    const corps = await req.arrayBuffer();
+    // L'appli Android peut envoyer les données en base64 (couche réseau native).
+    const corps = req.headers.get("x-revizz-encodage") === "base64" ? Uint8Array.from(Buffer.from(await req.text(), "base64")).buffer : await req.arrayBuffer();
     if (!corps.byteLength) return json(400, { erreur: "Données vides." }, cors);
     if (corps.byteLength > TAILLE_MAX) return json(413, { erreur: "Trop de données pour la synchronisation." }, cors);
     const suivante = rev + 1;

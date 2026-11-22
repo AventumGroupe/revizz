@@ -1,16 +1,22 @@
 // Compte élève : identifiant + mot de passe, valable sur le téléphone et sur le site web.
 // Le jeton de connexion est gardé sur l'appareil (jamais le mot de passe).
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import { getSettings, saveSettings, ecrire } from "./store.js";
 import { adresseServeur, ADRESSE_PAR_DEFAUT, normaliserAdresse } from "./claude.js";
 import { CLES } from "./sauvegarde.js";
 
 async function essai(base, action, { corps, methode, jeton }) {
-  return fetch(`${base}/api/compte/${action}`, {
-    method: methode,
-    headers: { "content-type": "application/json", ...(jeton ? { "x-revizz-jeton": jeton } : {}) },
-    body: corps ? JSON.stringify(corps) : undefined,
-    cache: "no-store",
-  });
+  const url = `${base}/api/compte/${action}`;
+  const headers = { "content-type": "application/json", ...(jeton ? { "x-revizz-jeton": jeton } : {}) };
+  try {
+    return await fetch(url, { method: methode, headers, body: corps ? JSON.stringify(corps) : undefined, cache: "no-store" });
+  } catch (e) {
+    // Sur Android, le navigateur intégré peut bloquer la requête (règles CORS) : on passe par la couche réseau native.
+    if (!Capacitor.isNativePlatform()) throw e;
+    const r = await CapacitorHttp.request({ url, method: methode, headers, data: corps || undefined });
+    const texte = typeof r.data === "string" ? r.data : JSON.stringify(r.data ?? {});
+    return new Response(texte, { status: r.status, headers: { "content-type": "application/json" } });
+  }
 }
 
 async function appel(action, { corps, methode = "POST", jeton, serveur } = {}) {
