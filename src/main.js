@@ -171,6 +171,15 @@ const afterRender = {};
 afterRender.welcome = () => (document.getElementById("btn-demo").onclick = entrerDemo);
 
 // ---------- Connexion au compte ----------
+const normaliserIdentifiant = (v) =>
+  String(v || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._-]/g, "")
+    .slice(0, 30);
 let modeCompte = "connexion"; // ou "inscription"
 function connexionView() {
   const s = store.getSettings();
@@ -182,7 +191,7 @@ function connexionView() {
   <div class="seg">${[["connexion", "Se connecter"], ["inscription", "Créer un compte"]].map(([k, l]) => `<button class="${modeCompte === k ? "on" : ""}" data-mode-compte="${k}">${l}</button>`).join("")}</div>
   <form id="form-compte" class="card" autocomplete="on">
     ${adresseConnue ? "" : `<label class="field">Adresse du site Révizz<input id="cx-serveur-url" type="url" inputmode="url" value="${esc(s.serveur || "")}" placeholder="https://revizz.netlify.app" autocomplete="off" required></label>`}
-    <label class="field">Identifiant<input id="cx-ident" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(s.identifiant || "")}" placeholder="ex : lucas.m" required></label>
+    <label class="field">Identifiant<input id="cx-ident" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" value="${esc(s.identifiant || "")}" placeholder="ex : lucas.m" required></label>
     <label class="field">Mot de passe<input id="cx-mdp" type="password" autocomplete="${insc ? "new-password" : "current-password"}" minlength="${insc ? 8 : 1}" required></label>
     ${
       insc
@@ -203,7 +212,11 @@ afterRender.connexion = () => {
   $("cx-voir").onchange = (e) => document.querySelectorAll("#cx-mdp, #cx-mdp2").forEach((x) => (x.type = e.target.checked ? "text" : "password"));
   $("form-compte").onsubmit = async (e) => {
     e.preventDefault();
-    const ident = $("cx-ident").value.trim();
+    // Identifiant simplifié automatiquement : minuscules, sans accent, espaces remplacés par des points.
+    const ident = normaliserIdentifiant($("cx-ident").value);
+    $("cx-ident").value = ident;
+    if (!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(ident))
+      return ($("cx-msg").innerHTML = `<div class="error">Identifiant trop court ou invalide : 3 à 30 caractères, lettres sans accent, chiffres, point ou tiret (ex : lucas.m).</div>`);
     const mdp = $("cx-mdp").value;
     const serveur = $("cx-serveur-url")?.value.trim().replace(/\/+$/, "") || undefined;
     if (modeCompte === "inscription" && mdp !== $("cx-mdp2").value) return ($("cx-msg").innerHTML = `<div class="error">Les deux mots de passe ne sont pas identiques.</div>`);
