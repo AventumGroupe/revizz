@@ -596,14 +596,11 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .tuteur.on { border-color: var(--primary); background: var(--soft); }
 .tuteur b { font-size: .82rem; } .tuteur small { font-size: .7rem; color: var(--muted); text-align: center; line-height: 1.2; }
 
-/* Skins d'Atlas */
+/* Tenues d'Atlas (au choix) */
 .masc-atlas .bras { stroke: none; }
 .masc-atlas.masc-salut .bras-coucou { transform-box: view-box; transform-origin: 79px 74px; }
 .skins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.skin { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 22px 4px 10px; border-radius: 14px; border: 3px solid var(--line); background: var(--line-2); }
-.skin:not(.gagne) .masc { filter: grayscale(1) brightness(.6); opacity: .7; }
-.skin.gagne { border-color: var(--r); background: linear-gradient(180deg, color-mix(in srgb, var(--r) 18%, var(--card)), var(--card)); }
-.skin .rarete { position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); padding: 2px 8px; border-radius: 999px; background: var(--r); color: #fff; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
-.skin:not(.gagne) .rarete { background: var(--muted); }
+.skin { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); font-family: inherit; color: var(--text); }
+.skin.on { border-color: var(--primary); background: var(--soft); }
 .skin b { font-size: .82rem; } .skin small { font-size: .7rem; color: var(--muted); }
-.skins { margin-top: 14px; }
+

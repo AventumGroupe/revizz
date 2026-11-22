@@ -1,9 +1,9 @@
 // Les tuteurs de Révizz, dessinés en SVG et animés :
 // - Gribouille, une goutte d'encre à lunettes (collège → Seconde) ;
-// - Atlas, un héros du savoir (Première → études supérieures), dont la tenue évolue avec le niveau de l'élève.
+// - Atlas, un héros du savoir (Première → études supérieures), en trois tenues au choix.
 // Humeurs : salut, content, bravo, reflechit, courage.
 import { tuteurActuel, nomTuteur } from "./tuteurs.js";
-import { niveauDe, gouttesTotales } from "./jeu.js";
+import { getSettings } from "./store.js";
 // Dessin vectoriel (SVG) dans l'appli : net à toutes les tailles, rien à télécharger.
 // Humeurs : salut, content, bravo, reflechit, courage.
 
@@ -38,17 +38,17 @@ export function mascotte(humeur = "content", taille = 72, qui = tuteurActuel(), 
   return qui === "atlas" ? atlas(humeur, taille, etape || etapeAtlas()) : gribouille(humeur, taille);
 }
 
-/** Tenue d'Atlas selon le niveau : 1 apprenti (niveaux 1 à 4), 2 confirmé avec cape (5 à 9), 3 légendaire (10 et plus). */
+/** Tenue d'Atlas choisie par l'élève dans son profil (Héros par défaut). */
 export function etapeAtlas() {
-  const nv = niveauDe(gouttesTotales()).niveau;
-  return nv >= 10 ? 3 : nv >= 5 ? 2 : 1;
+  const k = Number(getSettings().skinAtlas);
+  return [1, 2, 3].includes(k) ? k : 2;
 }
-export const NOMS_ETAPES_ATLAS = { 1: "Atlas Recrue", 2: "Atlas Héros", 3: "Atlas Légendaire" };
-// Skins d'Atlas, du plus simple au plus rare (débloqués aux niveaux 1, 5 et 10).
+export const NOMS_ETAPES_ATLAS = { 1: "Atlas Urbain", 2: "Atlas Héros", 3: "Atlas Nuit d'or" };
+// Tenues d'Atlas, au choix de l'élève (aucune n'est à gagner).
 export const SKINS_ATLAS = {
-  1: { rarete: "Rare", couleur: "#16a34a", niveau: 1 },
-  2: { rarete: "Épique", couleur: "#2563eb", niveau: 5 },
-  3: { rarete: "Légendaire", couleur: "#f59e0b", niveau: 10 },
+  1: { style: "Sans cape", couleur: "#16a34a" },
+  2: { style: "Avec cape", couleur: "#2563eb" },
+  3: { style: "Noir et or", couleur: "#f59e0b" },
 };
 
 // Style « jeu mobile » : grosse tête, contour épais, ombres franches (aplat clair + aplat sombre), gants et bottes massifs.
