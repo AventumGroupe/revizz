@@ -186,7 +186,7 @@ function connexionView() {
     ${
       insc
         ? `<label class="field">Confirme le mot de passe<input id="cx-mdp2" type="password" autocomplete="new-password" required></label>
-           <label class="field">Code famille <small>(demande-le à un parent)</small><input id="cx-code" type="password" autocomplete="off" required></label>
+           <label class="field">Code famille <small>(demande-le à un parent)</small><input id="cx-code" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
            <p class="hint">Identifiant : lettres minuscules, chiffres, point ou tiret. Mot de passe : 8 caractères au moins.</p>`
         : ""
     }
@@ -210,7 +210,7 @@ afterRender.connexion = () => {
     $("cx-msg").innerHTML = "";
     try {
       if (store.getSettings().demo) quitterDemo();
-      if (modeCompte === "inscription") await compte.inscription(ident, mdp, $("cx-code").value, serveur);
+      if (modeCompte === "inscription") await compte.inscription(ident, mdp, $("cx-code").value.trim(), serveur);
       else await compte.connexion(ident, mdp, serveur);
       $("cx-msg").innerHTML = `<p class="hint">Connecté ! Je récupère ton travail…</p>`;
       let n = 0;
@@ -1748,20 +1748,20 @@ function settings() {
         <input id="serveur" type="url" inputmode="url" value="${esc(s.serveur || ai.adresseServeur({ ...s, serveur: "" }))}" placeholder="https://revizz.netlify.app" autocomplete="off">
       </label>
       <label class="field">Code famille
-        <input id="code" type="password" value="${esc(s.code)}" placeholder="le code choisi dans Netlify" autocomplete="off">
+        <input id="code" type="password" value="${esc(s.code)}" placeholder="le code choisi dans Netlify" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
       </label>
       <p class="hint">La clé Claude est gardée sur le serveur Netlify : elle n'est jamais sur cet appareil. Le même code fonctionne sur le téléphone et sur le site web.</p>
     </div>
     <div id="cx-cle" ${s.connexion === "cle" ? "" : "hidden"}>
       <label class="field">Clé API Claude
-        <input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off">
+        <input id="apikey" type="password" value="${esc(s.apiKey)}" placeholder="sk-ant-…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
       </label>
       <p class="hint">Crée une clé sur <b>platform.claude.com</b> → API Keys. Elle reste sur cet appareil. Pense à fixer une limite de dépense mensuelle dans la console.</p>
     </div>
     <details class="aide"><summary>Réinitialiser le mot de passe d'un compte élève</summary>
-      <label class="field">Identifiant du compte<input id="re-ident" autocapitalize="none" autocomplete="off"></label>
+      <label class="field">Identifiant du compte<input id="re-ident" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off"></label>
       <label class="field">Nouveau mot de passe<input id="re-mdp" type="text" autocomplete="off" placeholder="8 caractères au moins"></label>
-      <label class="field">Code famille<input id="re-code" type="password" autocomplete="off"></label>
+      <label class="field">Code famille<input id="re-code" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
       <button class="btn secondary big-btn" id="re-ok">Réinitialiser</button>
     </details>
     <label class="field">Modèle<select id="model">${ai.MODELS.map((m) => `<option value="${m.id}" ${m.id === s.model ? "selected" : ""}>${m.label}</option>`).join("")}</select></label>
@@ -1939,7 +1939,7 @@ afterRender.settings = () => {
   if ($$("re-ok"))
     $$("re-ok").onclick = async () => {
       try {
-        await compte.reinitialiser($$("re-ident").value.trim(), $$("re-mdp").value, $$("re-code").value);
+        await compte.reinitialiser($$("re-ident").value.trim(), $$("re-mdp").value, $$("re-code").value.trim());
         toast("Mot de passe réinitialisé");
         $$("re-mdp").value = "";
       } catch (e) {
@@ -1973,7 +1973,7 @@ afterRender.settings = () => {
       const serveur = $("serveur").value.trim();
       Object.assign(reglages, {
         connexion,
-        apiKey: $("apikey").value.trim(),
+        apiKey: ai.nettoyerCle($("apikey").value),
         code: $("code").value.trim(),
         // On ne mémorise l'adresse que si elle diffère de celle trouvée automatiquement.
         serveur: serveur && serveur !== ai.adresseServeur({ serveur: "" }) ? serveur : "",

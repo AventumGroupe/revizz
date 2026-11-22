@@ -53,7 +53,7 @@ const signature = (d) => JSON.stringify(CLES.map((k) => d[k] ?? null));
 
 async function appel(methode, corps, rev) {
   const s = getSettings();
-  const headers = s.connexion === "compte" ? { "x-revizz-jeton": s.jeton } : { "x-revizz-code": s.code };
+  const headers = s.connexion === "compte" ? { "x-revizz-jeton": s.jeton } : { "x-revizz-code": String(s.code || "").trim() };
   if (rev !== undefined) headers["x-revizz-rev"] = String(rev);
   if (corps) headers["content-type"] = "application/octet-stream";
   const r = await fetch(`${adresseServeur(s)}/api/sync`, { method: methode, headers, body: corps, cache: "no-store" });

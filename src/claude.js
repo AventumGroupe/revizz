@@ -29,12 +29,15 @@ export function estConfigure(s = getSettings()) {
   return s.connexion === "cle" ? !!s.apiKey : !!(s.code && adresseServeur(s));
 }
 
+/** Une clé collée depuis un message ou un mail traîne souvent des espaces, retours à la ligne ou guillemets. */
+export const nettoyerCle = (k) => String(k || "").replace(/[\s"'«»`]/g, "");
+
 function client() {
   const s = getSettings();
   if (s.connexion === "cle") {
     if (!s.apiKey) throw new Error("Ajoute d'abord ta clé API Claude dans les Réglages ⚙️.");
     // Clé personnelle : elle reste sur l'appareil et part directement chez Anthropic.
-    return new Anthropic({ apiKey: s.apiKey, dangerouslyAllowBrowser: true, maxRetries: 3 });
+    return new Anthropic({ apiKey: nettoyerCle(s.apiKey), dangerouslyAllowBrowser: true, maxRetries: 3 });
   }
   const base = adresseServeur(s);
   if (s.connexion === "compte") {
@@ -48,7 +51,7 @@ function client() {
     baseURL: `${base}/api/claude`,
     dangerouslyAllowBrowser: true,
     maxRetries: 3,
-    defaultHeaders: { "x-revizz-code": s.code },
+    defaultHeaders: { "x-revizz-code": String(s.code || "").trim() },
   });
 }
 
@@ -97,7 +100,11 @@ function explainError(err) {
   // Messages du serveur Révizz (code famille, configuration) : on les affiche tels quels.
   if (err?.error?.error?.type === "revizz_error") return new Error(err.error.error.message);
   if (err instanceof Anthropic.AuthenticationError)
-    return new Error(getSettings().connexion === "cle" ? "Clé API refusée. Vérifie-la dans les Réglages ⚙️." : "Le serveur Révizz refuse la clé API : vérifie ANTHROPIC_API_KEY dans Netlify.");
+    return new Error(
+      getSettings().connexion === "cle"
+        ? `Clé API refusée par Claude (clé enregistrée : ${nettoyerCle(getSettings().apiKey).slice(0, 10)}…, ${nettoyerCle(getSettings().apiKey).length} caractères). Vérifie qu'elle est complète, ou passe plutôt par un compte élève (Profil) : la clé reste alors sur le serveur.`
+        : "Le serveur Révizz refuse la clé API : vérifie ANTHROPIC_API_KEY dans Netlify."
+    );
   if (err instanceof Anthropic.NotFoundError && getSettings().connexion !== "cle") return new Error("Adresse du site Révizz introuvable : vérifie-la dans les Réglages ⚙️.");
   if (err instanceof Anthropic.PermissionDeniedError) return new Error("Cette clé n'a pas accès à ce modèle. Essaie un autre modèle dans les Réglages.");
   if (err instanceof Anthropic.RateLimitError) return new Error("Trop de demandes d'un coup. Attends une minute et réessaie.");
