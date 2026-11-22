@@ -12,7 +12,7 @@ import { POINTS_LANGUE, estRedactionnelle } from "./evaluation.js";
 import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
-import { mascotte, bulle, reactionNote, phraseAccueil, etapeAtlas, NOMS_ETAPES_ATLAS } from "./mascotte.js";
+import { mascotte, bulle, reactionNote, phraseAccueil, etapeAtlas, NOMS_ETAPES_ATLAS, SKINS_ATLAS } from "./mascotte.js";
 import * as jeu from "./jeu.js";
 import * as dose from "./dose.js";
 import * as compte from "./compte.js";
@@ -81,7 +81,7 @@ function celebrer() {
   const confettis = Array.from({ length: 18 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${(i % 6) * 0.12}s;--c:${["#2563eb", "#f5b301", "#12a150", "#60a5fa", "#e8590c"][i % 5]}"></i>`).join("");
   modale(
     `<div class="fete"><div class="confettis">${confettis}</div>
-      ${mascotte("bravo", 96)}
+      ${ev.skin ? mascotte("bravo", 110, "atlas", ev.skin) : mascotte("bravo", 96)}
       ${ev.icone ? `<span class="badge-rond gagne">${ic(ev.icone, 26)}</span>` : ""}
       <h3>${esc(ev.titre)}</h3><p>${esc(ev.texte)}</p>
       <button class="btn primary big-btn" data-ok>Trop bien !</button></div>`,
@@ -89,6 +89,12 @@ function celebrer() {
   );
 }
 function annoncer(evts) {
+  // Nouveau skin d'Atlas aux niveaux 5 et 10.
+  for (const e of [...evts]) {
+    const nv = e.type === "niveau" && +e.titre.replace(/\D/g, "");
+    const etape = nv === 5 ? 2 : nv === 10 ? 3 : 0;
+    if (etape && tuteurActuel() === "atlas") evts.push({ type: "skin", titre: `Nouveau skin : ${NOMS_ETAPES_ATLAS[etape]}`, texte: `Skin ${SKINS_ATLAS[etape].rarete.toLowerCase()} débloqué. Atlas le porte dès maintenant !`, skin: etape });
+  }
   const gros = evts.filter((e) => !e.petit);
   evts.filter((e) => e.petit).forEach((e) => toast(e.texte));
   // Plusieurs badges d'un coup : une seule fête, pour ne pas enchaîner les fenêtres.
@@ -367,7 +373,16 @@ function jeuProfilHTML() {
         return `<button class="tuteur ${choisi ? "on" : ""}" data-tuteur="${k}">${mascotte("content", 46, qui)}<b>${k === "auto" ? "Selon ma classe" : TUTEURS[k].nom}</b><small>${k === "auto" ? TUTEURS[qui].nom : TUTEURS[k].pour}</small></button>`;
       })
       .join("")}</div>
-    ${tuteurActuel() === "atlas" ? `<p class="hint">${NOMS_ETAPES_ATLAS[etapeAtlas()]} : sa tenue évolue avec ton niveau (cape au niveau 5, aura dorée au niveau 10).</p>` : ""}
+    ${
+      tuteurActuel() === "atlas"
+        ? `<h3>Skins d'Atlas</h3><div class="skins">${[1, 2, 3]
+            .map((e) => {
+              const ok = etapeAtlas() >= e;
+              return `<div class="skin ${ok ? "gagne" : ""}" style="--r:${SKINS_ATLAS[e].couleur}"><span class="rarete">${SKINS_ATLAS[e].rarete}</span>${atlasApercu(e)}<b>${NOMS_ETAPES_ATLAS[e].replace("Atlas ", "")}</b><small>${ok ? (etapeAtlas() === e ? "Équipé" : "Débloqué") : `Niveau ${SKINS_ATLAS[e].niveau}`}</small></div>`;
+            })
+            .join("")}</div>`
+        : ""
+    }
     <h3>Cartes par jour</h3>
     <div class="seg">${dose.QUOTAS.map((q) => `<button class="${(Number(store.getSettings().doseCartes) || 15) === q ? "on" : ""}" data-dose="${q}">${q} cartes</button>`).join("")}</div>
     <p class="hint">Environ ${Math.round(((Number(store.getSettings().doseCartes) || 15) * 20) / 60)} minutes par jour. +10 cartes les 3 jours avant un contrôle.</p>
@@ -381,6 +396,8 @@ function jeuProfilHTML() {
     ).join("")}</div>
   </div>`;
 }
+// Aperçu d'un skin d'Atlas (même verrouillé, pour donner envie).
+const atlasApercu = (etape) => mascotte("content", 54, "atlas", etape);
 // Profil : le compte de l'élève.
 function carteCompteHTML(s) {
   if (compte.estConnecte(s))

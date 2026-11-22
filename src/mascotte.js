@@ -34,8 +34,8 @@ const etoile = (x, y, r, d) =>
   `<path class="etincelle" style="animation-delay:${d}s" d="M${x} ${y - r} L${x + r * 0.3} ${y - r * 0.3} L${x + r} ${y} L${x + r * 0.3} ${y + r * 0.3} L${x} ${y + r} L${x - r * 0.3} ${y + r * 0.3} L${x - r} ${y} L${x - r * 0.3} ${y - r * 0.3}Z" fill="#f5b301"/>`;
 
 /** Le tuteur de l'élève (Gribouille ou Atlas), avec l'humeur demandée. */
-export function mascotte(humeur = "content", taille = 72, qui = tuteurActuel()) {
-  return qui === "atlas" ? atlas(humeur, taille, etapeAtlas()) : gribouille(humeur, taille);
+export function mascotte(humeur = "content", taille = 72, qui = tuteurActuel(), etape) {
+  return qui === "atlas" ? atlas(humeur, taille, etape || etapeAtlas()) : gribouille(humeur, taille);
 }
 
 /** Tenue d'Atlas selon le niveau : 1 apprenti (niveaux 1 à 4), 2 confirmé avec cape (5 à 9), 3 légendaire (10 et plus). */
@@ -43,64 +43,103 @@ export function etapeAtlas() {
   const nv = niveauDe(gouttesTotales()).niveau;
   return nv >= 10 ? 3 : nv >= 5 ? 2 : 1;
 }
-export const NOMS_ETAPES_ATLAS = { 1: "Atlas apprenti", 2: "Atlas confirmé", 3: "Atlas légendaire" };
-
-const PEAU = "#e8b48a", COSTUME = "#1e3a8a", OR = "#f5b301", CAPE = "#ea580c";
-const BOUCHES_ATLAS = {
-  salut: `<path d="M53 55 Q60 61 67 55" stroke="${ENCRE}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`,
-  content: `<path d="M53 55 Q60 61 67 55" stroke="${ENCRE}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`,
-  bravo: `<path d="M52 54 Q60 66 68 54 Z" fill="${ENCRE}"/><path d="M56 59 Q60 63 64 59 Q60 57 56 59Z" fill="#ff8a8a"/>`,
-  reflechit: `<ellipse cx="63" cy="57" rx="2.6" ry="2.2" fill="${ENCRE}"/>`,
-  courage: `<path d="M53 55 L67 54" stroke="${ENCRE}" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M64 54 Q67 52 68 55" stroke="${ENCRE}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+export const NOMS_ETAPES_ATLAS = { 1: "Atlas Recrue", 2: "Atlas Héros", 3: "Atlas Légendaire" };
+// Skins d'Atlas, du plus simple au plus rare (débloqués aux niveaux 1, 5 et 10).
+export const SKINS_ATLAS = {
+  1: { rarete: "Rare", couleur: "#16a34a", niveau: 1 },
+  2: { rarete: "Épique", couleur: "#2563eb", niveau: 5 },
+  3: { rarete: "Légendaire", couleur: "#f59e0b", niveau: 10 },
 };
-// [tracé du bras, x et y du poing]
+
+// Style « jeu mobile » : grosse tête, contour épais, ombres franches (aplat clair + aplat sombre), gants et bottes massifs.
+const TRAIT = "#111827";
+const PALETTES = {
+  1: { costume: "#2563eb", ombre: "#1d4ed8", accent: "#cbd5e1", accentOmbre: "#94a3b8", masque: "#334155", cape: null, cheveux: "#3b2a1f" },
+  2: { costume: "#1e40af", ombre: "#1e3a8a", accent: "#fbbf24", accentOmbre: "#d97706", masque: "#1e3a8a", cape: "#ea580c", capeOmbre: "#c2410c", cheveux: "#2b1d14" },
+  3: { costume: "#0f172a", ombre: "#020617", accent: "#fcd34d", accentOmbre: "#f59e0b", masque: "#f59e0b", cape: "#dc2626", capeOmbre: "#991b1b", cheveux: "#1f160f" },
+};
+const PEAU = "#f1c08f", PEAU_OMBRE = "#d99a66";
+const BOUCHES_ATLAS = {
+  salut: `<path d="M49 53 Q60 63 71 53 Q60 57 49 53Z" fill="#fff" stroke="${TRAIT}" stroke-width="2.4" stroke-linejoin="round"/>`,
+  content: `<path d="M49 53 Q60 63 71 53 Q60 57 49 53Z" fill="#fff" stroke="${TRAIT}" stroke-width="2.4" stroke-linejoin="round"/>`,
+  bravo: `<path d="M47 51 Q60 70 73 51 Z" fill="#7f1d1d" stroke="${TRAIT}" stroke-width="2.4" stroke-linejoin="round"/><path d="M48.5 52 L71.5 52 L70 55 L50 55Z" fill="#fff"/><path d="M54 62 Q60 66 66 62 Q60 59 54 62Z" fill="#f87171"/>`,
+  reflechit: `<path d="M55 57 Q60 54 66 57" stroke="${TRAIT}" stroke-width="3" fill="none" stroke-linecap="round"/>`,
+  courage: `<path d="M50 56 Q61 59 70 52" stroke="${TRAIT}" stroke-width="3" fill="none" stroke-linecap="round"/>`,
+};
+// Sourcils épais et expressifs (gauche, droite).
+const SOURCILS_ATLAS = {
+  salut: ["M39 30 L54 32", "M66 32 L81 30"],
+  content: ["M39 30 L54 32", "M66 32 L81 30"],
+  bravo: ["M39 27 L54 29", "M66 29 L81 27"],
+  reflechit: ["M40 32 L54 32", "M66 29 L80 25"],
+  courage: ["M39 28 L54 33", "M66 33 L81 28"],
+};
+const REGARD_ATLAS = { salut: [0, 0], content: [0, 0.5], bravo: [0, -0.5], reflechit: [2, -1.8], courage: [0, 0] };
+// Bras : [tracé, x du gant, y du gant, classe]
 const BRAS_ATLAS = {
-  salut: [["M42 72 Q32 84 30 96", 30, 96], ["M78 72 Q92 60 94 44", 94, 44, "bras-coucou"]],
-  content: [["M42 72 Q32 84 30 96", 30, 96], ["M78 72 Q88 84 90 96", 90, 96]],
-  bravo: [["M42 72 Q30 56 28 42", 28, 42], ["M78 72 Q90 56 92 42", 92, 42]],
-  reflechit: [["M42 72 Q32 84 30 96", 30, 96], ["M78 72 Q88 68 70 61", 70, 61]],
-  courage: [["M42 72 Q28 84 44 96", 44, 96], ["M78 72 Q92 84 76 96", 76, 96]], // poings sur les hanches : posture de héros
+  salut: [["M41 74 Q30 86 29 97", 29, 97], ["M79 74 Q93 62 95 46", 95, 46, "bras-coucou"]],
+  content: [["M41 74 Q30 86 29 97", 29, 97], ["M79 74 Q90 86 91 97", 91, 97]],
+  bravo: [["M41 74 Q28 58 26 42", 26, 42], ["M79 74 Q92 58 94 42", 94, 42]],
+  reflechit: [["M41 74 Q30 86 29 97", 29, 97], ["M79 74 Q90 72 72 63", 72, 63]],
+  courage: [["M41 74 Q27 86 42 98", 42, 98], ["M79 74 Q93 86 78 98", 78, 98]],
 };
 
 function atlas(humeur, taille, etape) {
   const id = `at${++n}`;
   const h = BOUCHES_ATLAS[humeur] ? humeur : "content";
-  const [dx, dy] = REGARD[h].map((v) => v * 0.55);
+  const c = PALETTES[etape] || PALETTES[1];
+  const [dx, dy] = REGARD_ATLAS[h];
+  const t = `stroke="${TRAIT}" stroke-width="3" stroke-linejoin="round"`;
   const bras = BRAS_ATLAS[h]
-    .map(([d, x, y, cls]) => `<g class="${cls || ""}"><path d="${d}" class="bras"/><circle cx="${x}" cy="${y}" r="5" fill="${PEAU}"/></g>`)
+    .map(
+      ([d, x, y, cls]) => `<g class="${cls || ""}">
+      <path d="${d}" stroke="${TRAIT}" stroke-width="12" stroke-linecap="round" fill="none"/>
+      <path d="${d}" stroke="${c.costume}" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <circle cx="${x}" cy="${y}" r="7" fill="${c.accent}" ${t}/><path d="M${x - 4} ${y + 2} Q${x} ${y + 5} ${x + 4} ${y + 2}" stroke="${c.accentOmbre}" stroke-width="2" fill="none"/>
+    </g>`
+    )
     .join("");
-  const sourcils =
-    h === "reflechit"
-      ? `<path d="M64 36 Q70 33 76 36" stroke="${ENCRE}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`
-      : h === "courage"
-        ? `<path d="M44 38 Q50 35 56 37" stroke="${ENCRE}" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M64 37 Q70 35 76 38" stroke="${ENCRE}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`
-        : "";
-  return `<svg class="masc masc-atlas masc-${h}" width="${taille}" height="${Math.round(taille * 1.08)}" viewBox="0 0 120 130" role="img" aria-label="Atlas, ton coach">
-  <defs><radialGradient id="${id}"><stop offset="0" stop-color="#fde68a" stop-opacity=".9"/><stop offset="1" stop-color="#fde68a" stop-opacity="0"/></radialGradient></defs>
-  <ellipse class="masc-ombre" cx="60" cy="126" rx="30" ry="4" fill="${ENCRE}" opacity=".12"/>
-  ${etape >= 3 ? `<circle class="aura" cx="60" cy="70" r="58" fill="url(#${id})"/>` : ""}
+  const [sg, sd] = SOURCILS_ATLAS[h];
+  return `<svg class="masc masc-atlas masc-${h} skin-${etape}" width="${taille}" height="${Math.round(taille * 1.08)}" viewBox="0 0 120 130" role="img" aria-label="${NOMS_ETAPES_ATLAS[etape]}, ton coach">
+  <defs><radialGradient id="${id}"><stop offset="0" stop-color="#fde68a" stop-opacity=".95"/><stop offset=".6" stop-color="#fbbf24" stop-opacity=".35"/><stop offset="1" stop-color="#fbbf24" stop-opacity="0"/></radialGradient></defs>
+  <ellipse class="masc-ombre" cx="60" cy="126" rx="30" ry="4" fill="${TRAIT}" opacity=".15"/>
+  ${etape >= 3 ? `<circle class="aura" cx="60" cy="66" r="60" fill="url(#${id})"/>` : ""}
   <g class="masc-corps">
-    ${etape >= 2 ? `<path d="M40 66 Q18 98 24 122 L96 122 Q102 98 80 66 Z" fill="${CAPE}"/><path d="M60 70 Q56 100 60 122" stroke="#c2410c" stroke-width="2" fill="none" opacity=".6"/>` : ""}
-    <rect x="46" y="100" width="12" height="16" fill="${COSTUME}"/><rect x="62" y="100" width="12" height="16" fill="${COSTUME}"/>
-    <rect x="44" y="112" width="16" height="10" rx="3" fill="${OR}"/><rect x="60" y="112" width="16" height="10" rx="3" fill="${OR}"/>
-    ${bras}
-    <path d="M40 70 Q60 62 80 70 L76 104 Q60 108 44 104 Z" fill="${COSTUME}"/>
-    <rect x="44" y="95" width="32" height="6" rx="2" fill="${OR}"/>
-    <circle cx="60" cy="82" r="${etape >= 3 ? 10 : 9}" fill="${OR}" ${etape >= 3 ? `stroke="#fff" stroke-width="2"` : ""}/>
-    <path d="M53.5 81 Q57 79 60 81 Q63 79 66.5 81 L66.5 86.5 Q63 84.5 60 86.5 Q57 84.5 53.5 86.5Z" fill="${COSTUME}"/>
-    <rect x="55" y="60" width="10" height="7" fill="${PEAU}"/>
-    <circle cx="60" cy="45" r="19" fill="${PEAU}"/>
-    <path d="M41 43 Q42 24 60 23 Q78 24 79 43 L74 34 L70 40 L65 30 L59 38 L53 30 L48 40 Z" fill="#1f2937"/>
-    ${sourcils}
-    <path d="M40 41 Q60 35 80 41 L80 51 Q60 46 40 51 Z" fill="${COSTUME}"/>
+    ${
+      c.cape
+        ? `<path d="M42 70 Q20 92 18 120 L31 114 L41 122 L51 115 L60 123 L69 115 L79 122 L89 114 L102 120 Q100 92 78 70 Z" fill="${c.cape}" ${t}/>
+           <path d="M78 72 Q96 94 99 116 L89 112 L79 119 Q84 96 72 74Z" fill="${c.capeOmbre}"/>
+           ${etape >= 3 ? `<path d="M18 120 L31 114 L41 122 L51 115 L60 123 L69 115 L79 122 L89 114 L102 120" stroke="${c.accent}" stroke-width="2.5" fill="none" stroke-linejoin="round"/>` : ""}`
+        : ""
+    }
+    <rect x="46" y="100" width="12" height="14" rx="3" fill="${c.costume}" ${t}/><rect x="62" y="100" width="12" height="14" rx="3" fill="${c.costume}" ${t}/>
+    <path d="M42 110 h17 v8 q0 4 -4 4 h-13 q-3 0 -3 -3 v-6 q0 -3 3 -3Z" fill="${c.accent}" ${t}/><path d="M61 110 h17 q3 0 3 3 v6 q0 3 -3 3 h-13 q-4 0 -4 -4Z" fill="${c.accent}" ${t}/>
+    <path d="M42 70 Q60 63 78 70 Q83 88 77 106 Q60 111 43 106 Q37 88 42 70Z" fill="${c.costume}" ${t}/>
+    <path d="M66 67 Q78 70 79 80 Q81 94 76 105 Q70 107 66 107 Q71 88 66 67Z" fill="${c.ombre}"/>
+    <rect x="43" y="95" width="34" height="7" rx="2" fill="${c.accent}" ${t}/><rect x="56" y="94" width="8" height="9" rx="2" fill="${c.accentOmbre}" ${t}/>
+    <path d="M50 75 L70 75 L70 84 Q70 91 60 94 Q50 91 50 84Z" fill="${c.accent}" ${t}/>
+    ${
+      etape >= 3
+        ? `<path d="M60 77 L62.2 82 L67.5 82.4 L63.4 85.8 L64.8 91 L60 88 L55.2 91 L56.6 85.8 L52.5 82.4 L57.8 82Z" fill="${c.costume}"/>`
+        : `<path d="M53.5 80 Q57 78 60 80 Q63 78 66.5 80 L66.5 87 Q63 85 60 87 Q57 85 53.5 87Z" fill="${c.costume}"/>`
+    }
+    ${h === "reflechit" ? "" : bras}
+    <circle cx="60" cy="42" r="25" fill="${PEAU}" ${t}/>
+    <path d="M72 22 Q86 32 84 48 Q80 62 66 66 Q80 52 76 36 Q74 28 72 22Z" fill="${PEAU_OMBRE}"/>
+    <path d="M34 40 Q32 18 52 14 Q48 20 52 22 Q56 11 70 13 Q66 18 70 20 Q80 14 88 22 Q83 24 84 28 Q90 32 87 42 Q80 30 66 28 Q50 26 40 34 Q36 37 34 40Z" fill="${c.cheveux}" ${t}/>
+    <path d="M50 19 Q58 15 66 17" stroke="#fff" stroke-width="2" fill="none" opacity=".35" stroke-linecap="round"/>
+    <path d="${sg}" stroke="${TRAIT}" stroke-width="4" stroke-linecap="round"/><path d="${sd}" stroke="${TRAIT}" stroke-width="4" stroke-linecap="round"/>
+    <path d="M33 37 Q60 31 87 37 L94 33 L90 42 Q88 46 87 47 Q60 41 33 47 Q31 45 30 42 L26 33Z" fill="${c.masque}" ${t}/>
     <g class="masc-yeux">
-      <ellipse cx="51" cy="45.5" rx="6" ry="4.4" fill="#fff"/><ellipse cx="69" cy="45.5" rx="6" ry="4.4" fill="#fff"/>
-      <circle cx="${51 + dx}" cy="${46 + dy}" r="2.3" fill="${ENCRE}"/><circle cx="${69 + dx}" cy="${46 + dy}" r="2.3" fill="${ENCRE}"/>
+      <ellipse cx="50" cy="41.5" rx="7" ry="5.6" fill="#fff" stroke="${TRAIT}" stroke-width="2"/><ellipse cx="70" cy="41.5" rx="7" ry="5.6" fill="#fff" stroke="${TRAIT}" stroke-width="2"/>
+      <circle cx="${51 + dx}" cy="${42 + dy}" r="3.2" fill="${TRAIT}"/><circle cx="${71 + dx}" cy="${42 + dy}" r="3.2" fill="${TRAIT}"/>
+      <circle cx="${52.2 + dx}" cy="${40.8 + dy}" r="1.1" fill="#fff"/><circle cx="${72.2 + dx}" cy="${40.8 + dy}" r="1.1" fill="#fff"/>
     </g>
     ${BOUCHES_ATLAS[h]}
+    ${h === "reflechit" ? bras : ""}
   </g>
-  ${h === "bravo" ? etoile(14, 30, 7, 0) + etoile(106, 24, 6, 0.3) + etoile(110, 50, 4, 0.6) : ""}
-  ${h === "reflechit" ? `<g class="masc-pensee" fill="#94a3b8"><circle cx="96" cy="30" r="3"/><circle cx="104" cy="20" r="4"/><circle cx="111" cy="8" r="5"/></g>` : ""}
+  ${h === "bravo" ? etoile(12, 30, 7, 0) + etoile(108, 22, 6, 0.3) + etoile(112, 50, 4, 0.6) : ""}
+  ${h === "reflechit" ? `<g class="masc-pensee" fill="#94a3b8"><circle cx="97" cy="28" r="3"/><circle cx="105" cy="18" r="4"/><circle cx="112" cy="7" r="5"/></g>` : ""}
 </svg>`;
 }
 
