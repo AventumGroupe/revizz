@@ -1814,7 +1814,8 @@ function settings() {
   </div>
   ${DEMO_ONLY ? "" : sauvegardeHTML()}
   ${consoHTML()}
-  <p class="hint center">Révizz · tes fiches restent sur cet appareil, et dans tes sauvegardes.</p>`;
+  <p class="hint center">Révizz · tes fiches restent sur cet appareil, et dans tes sauvegardes.</p>
+  <p class="version center">Version ${esc(__VERSION__)} · ${Capacitor.isNativePlatform() ? "appli Android" : "site web"} · ${esc(__DATE_BUILD__)}</p>`;
 }
 const nf = (n) => n.toLocaleString("fr-FR");
 const ilYa = (t) => {

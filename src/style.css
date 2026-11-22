@@ -604,3 +604,4 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .skin.on { border-color: var(--primary); background: var(--soft); }
 .skin b { font-size: .82rem; } .skin small { font-size: .7rem; color: var(--muted); }
 
+.version { color: var(--faint); font-size: .78rem; margin: 2px 0 18px; font-variant-numeric: tabular-nums; }
