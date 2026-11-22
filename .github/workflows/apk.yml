@@ -34,7 +34,7 @@ jobs:
       - name: Construire l'appli web et la copier dans Android
         env:
           # Adresse du site Révizz (Netlify), préremplie dans l'APK si la variable du dépôt existe.
-          VITE_REVIZZ_SERVEUR: ${{ vars.REVIZZ_SERVEUR }}
+          VITE_REVIZZ_SERVEUR: ${{ vars.REVIZZ_SERVEUR || 'https://revizz.netlify.app' }}
         run: npm run android:sync
 
       - name: Numéro de version

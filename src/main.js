@@ -180,7 +180,7 @@ function connexionView() {
   ${bulle(insc ? "salut" : "content", insc ? "Créons ton compte : tout ton travail y sera gardé, sur le téléphone comme sur l'ordinateur." : "Content de te revoir ! Connecte-toi pour retrouver tout ton travail.", { taille: 56 })}
   <div class="seg">${[["connexion", "Se connecter"], ["inscription", "Créer un compte"]].map(([k, l]) => `<button class="${modeCompte === k ? "on" : ""}" data-mode-compte="${k}">${l}</button>`).join("")}</div>
   <form id="form-compte" class="card" autocomplete="on">
-    ${adresseConnue ? "" : `<label class="field">Adresse du site Révizz<input id="cx-serveur-url" type="url" inputmode="url" value="${esc(s.serveur || "")}" placeholder="https://revizz-famille.netlify.app" autocomplete="off" required></label>`}
+    ${adresseConnue ? "" : `<label class="field">Adresse du site Révizz<input id="cx-serveur-url" type="url" inputmode="url" value="${esc(s.serveur || "")}" placeholder="https://revizz.netlify.app" autocomplete="off" required></label>`}
     <label class="field">Identifiant<input id="cx-ident" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(s.identifiant || "")}" placeholder="ex : lucas.m" required></label>
     <label class="field">Mot de passe<input id="cx-mdp" type="password" autocomplete="${insc ? "new-password" : "current-password"}" minlength="${insc ? 8 : 1}" required></label>
     ${
@@ -1745,7 +1745,7 @@ function settings() {
     </div>
     <div id="cx-serveur" ${s.connexion === "cle" ? "hidden" : ""}>
       <label class="field">Adresse du site Révizz
-        <input id="serveur" type="url" inputmode="url" value="${esc(s.serveur || ai.adresseServeur({ ...s, serveur: "" }))}" placeholder="https://revizz-famille.netlify.app" autocomplete="off">
+        <input id="serveur" type="url" inputmode="url" value="${esc(s.serveur || ai.adresseServeur({ ...s, serveur: "" }))}" placeholder="https://revizz.netlify.app" autocomplete="off">
       </label>
       <label class="field">Code famille
         <input id="code" type="password" value="${esc(s.code)}" placeholder="le code choisi dans Netlify" autocomplete="off">
