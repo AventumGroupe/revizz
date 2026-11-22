@@ -1,4 +1,9 @@
-// Gribouille, la mascotte de Révizz : une goutte d'encre à lunettes qui joue le prof.
+// Les tuteurs de Révizz, dessinés en SVG et animés :
+// - Gribouille, une goutte d'encre à lunettes (collège → Seconde) ;
+// - Atlas, un héros du savoir (Première → études supérieures), dont la tenue évolue avec le niveau de l'élève.
+// Humeurs : salut, content, bravo, reflechit, courage.
+import { tuteurActuel, nomTuteur } from "./tuteurs.js";
+import { niveauDe, gouttesTotales } from "./jeu.js";
 // Dessin vectoriel (SVG) dans l'appli : net à toutes les tailles, rien à télécharger.
 // Humeurs : salut, content, bravo, reflechit, courage.
 
@@ -28,8 +33,79 @@ const BRAS = {
 const etoile = (x, y, r, d) =>
   `<path class="etincelle" style="animation-delay:${d}s" d="M${x} ${y - r} L${x + r * 0.3} ${y - r * 0.3} L${x + r} ${y} L${x + r * 0.3} ${y + r * 0.3} L${x} ${y + r} L${x - r * 0.3} ${y + r * 0.3} L${x - r} ${y} L${x - r * 0.3} ${y - r * 0.3}Z" fill="#f5b301"/>`;
 
+/** Le tuteur de l'élève (Gribouille ou Atlas), avec l'humeur demandée. */
+export function mascotte(humeur = "content", taille = 72, qui = tuteurActuel()) {
+  return qui === "atlas" ? atlas(humeur, taille, etapeAtlas()) : gribouille(humeur, taille);
+}
+
+/** Tenue d'Atlas selon le niveau : 1 apprenti (niveaux 1 à 4), 2 confirmé avec cape (5 à 9), 3 légendaire (10 et plus). */
+export function etapeAtlas() {
+  const nv = niveauDe(gouttesTotales()).niveau;
+  return nv >= 10 ? 3 : nv >= 5 ? 2 : 1;
+}
+export const NOMS_ETAPES_ATLAS = { 1: "Atlas apprenti", 2: "Atlas confirmé", 3: "Atlas légendaire" };
+
+const PEAU = "#e8b48a", COSTUME = "#1e3a8a", OR = "#f5b301", CAPE = "#ea580c";
+const BOUCHES_ATLAS = {
+  salut: `<path d="M53 55 Q60 61 67 55" stroke="${ENCRE}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`,
+  content: `<path d="M53 55 Q60 61 67 55" stroke="${ENCRE}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`,
+  bravo: `<path d="M52 54 Q60 66 68 54 Z" fill="${ENCRE}"/><path d="M56 59 Q60 63 64 59 Q60 57 56 59Z" fill="#ff8a8a"/>`,
+  reflechit: `<ellipse cx="63" cy="57" rx="2.6" ry="2.2" fill="${ENCRE}"/>`,
+  courage: `<path d="M53 55 L67 54" stroke="${ENCRE}" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M64 54 Q67 52 68 55" stroke="${ENCRE}" stroke-width="2" fill="none" stroke-linecap="round"/>`,
+};
+// [tracé du bras, x et y du poing]
+const BRAS_ATLAS = {
+  salut: [["M42 72 Q32 84 30 96", 30, 96], ["M78 72 Q92 60 94 44", 94, 44, "bras-coucou"]],
+  content: [["M42 72 Q32 84 30 96", 30, 96], ["M78 72 Q88 84 90 96", 90, 96]],
+  bravo: [["M42 72 Q30 56 28 42", 28, 42], ["M78 72 Q90 56 92 42", 92, 42]],
+  reflechit: [["M42 72 Q32 84 30 96", 30, 96], ["M78 72 Q88 68 70 61", 70, 61]],
+  courage: [["M42 72 Q28 84 44 96", 44, 96], ["M78 72 Q92 84 76 96", 76, 96]], // poings sur les hanches : posture de héros
+};
+
+function atlas(humeur, taille, etape) {
+  const id = `at${++n}`;
+  const h = BOUCHES_ATLAS[humeur] ? humeur : "content";
+  const [dx, dy] = REGARD[h].map((v) => v * 0.55);
+  const bras = BRAS_ATLAS[h]
+    .map(([d, x, y, cls]) => `<g class="${cls || ""}"><path d="${d}" class="bras"/><circle cx="${x}" cy="${y}" r="5" fill="${PEAU}"/></g>`)
+    .join("");
+  const sourcils =
+    h === "reflechit"
+      ? `<path d="M64 36 Q70 33 76 36" stroke="${ENCRE}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`
+      : h === "courage"
+        ? `<path d="M44 38 Q50 35 56 37" stroke="${ENCRE}" stroke-width="2.4" fill="none" stroke-linecap="round"/><path d="M64 37 Q70 35 76 38" stroke="${ENCRE}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`
+        : "";
+  return `<svg class="masc masc-atlas masc-${h}" width="${taille}" height="${Math.round(taille * 1.08)}" viewBox="0 0 120 130" role="img" aria-label="Atlas, ton coach">
+  <defs><radialGradient id="${id}"><stop offset="0" stop-color="#fde68a" stop-opacity=".9"/><stop offset="1" stop-color="#fde68a" stop-opacity="0"/></radialGradient></defs>
+  <ellipse class="masc-ombre" cx="60" cy="126" rx="30" ry="4" fill="${ENCRE}" opacity=".12"/>
+  ${etape >= 3 ? `<circle class="aura" cx="60" cy="70" r="58" fill="url(#${id})"/>` : ""}
+  <g class="masc-corps">
+    ${etape >= 2 ? `<path d="M40 66 Q18 98 24 122 L96 122 Q102 98 80 66 Z" fill="${CAPE}"/><path d="M60 70 Q56 100 60 122" stroke="#c2410c" stroke-width="2" fill="none" opacity=".6"/>` : ""}
+    <rect x="46" y="100" width="12" height="16" fill="${COSTUME}"/><rect x="62" y="100" width="12" height="16" fill="${COSTUME}"/>
+    <rect x="44" y="112" width="16" height="10" rx="3" fill="${OR}"/><rect x="60" y="112" width="16" height="10" rx="3" fill="${OR}"/>
+    ${bras}
+    <path d="M40 70 Q60 62 80 70 L76 104 Q60 108 44 104 Z" fill="${COSTUME}"/>
+    <rect x="44" y="95" width="32" height="6" rx="2" fill="${OR}"/>
+    <circle cx="60" cy="82" r="${etape >= 3 ? 10 : 9}" fill="${OR}" ${etape >= 3 ? `stroke="#fff" stroke-width="2"` : ""}/>
+    <path d="M53.5 81 Q57 79 60 81 Q63 79 66.5 81 L66.5 86.5 Q63 84.5 60 86.5 Q57 84.5 53.5 86.5Z" fill="${COSTUME}"/>
+    <rect x="55" y="60" width="10" height="7" fill="${PEAU}"/>
+    <circle cx="60" cy="45" r="19" fill="${PEAU}"/>
+    <path d="M41 43 Q42 24 60 23 Q78 24 79 43 L74 34 L70 40 L65 30 L59 38 L53 30 L48 40 Z" fill="#1f2937"/>
+    ${sourcils}
+    <path d="M40 41 Q60 35 80 41 L80 51 Q60 46 40 51 Z" fill="${COSTUME}"/>
+    <g class="masc-yeux">
+      <ellipse cx="51" cy="45.5" rx="6" ry="4.4" fill="#fff"/><ellipse cx="69" cy="45.5" rx="6" ry="4.4" fill="#fff"/>
+      <circle cx="${51 + dx}" cy="${46 + dy}" r="2.3" fill="${ENCRE}"/><circle cx="${69 + dx}" cy="${46 + dy}" r="2.3" fill="${ENCRE}"/>
+    </g>
+    ${BOUCHES_ATLAS[h]}
+  </g>
+  ${h === "bravo" ? etoile(14, 30, 7, 0) + etoile(106, 24, 6, 0.3) + etoile(110, 50, 4, 0.6) : ""}
+  ${h === "reflechit" ? `<g class="masc-pensee" fill="#94a3b8"><circle cx="96" cy="30" r="3"/><circle cx="104" cy="20" r="4"/><circle cx="111" cy="8" r="5"/></g>` : ""}
+</svg>`;
+}
+
 /** SVG de Gribouille. */
-export function mascotte(humeur = "content", taille = 72) {
+function gribouille(humeur = "content", taille = 72) {
   const id = `gr${++n}`;
   const h = BOUCHES[humeur] ? humeur : "content";
   const [dx, dy] = REGARD[h];
@@ -55,7 +131,7 @@ export function mascotte(humeur = "content", taille = 72) {
 </svg>`;
 }
 
-/** Gribouille avec une bulle de dialogue. */
+/** Le tuteur avec une bulle de dialogue. */
 export function bulle(humeur, texte, { taille = 64, cls = "" } = {}) {
   return `<div class="masc-bulle ${cls}">${mascotte(humeur, taille)}<p class="masc-texte">${texte}</p></div>`;
 }
@@ -82,7 +158,7 @@ export function reactionNote(note, graine = "") {
 /** Phrase d'accueil selon la journée de l'élève. */
 export function phraseAccueil({ prenom, dues, minutes, doseFinie, serie, nbFiches, controle }) {
   const p = prenom ? ` ${prenom}` : "";
-  if (!nbFiches) return { humeur: "salut", texte: `Salut${p} ! Moi c'est Gribouille, ton prof de poche. Montre-moi un cours en photo et je m'occupe du reste.` };
+  if (!nbFiches) return { humeur: "salut", texte: `Salut${p} ! Moi c'est ${nomTuteur()}, ${tuteurActuel() === "atlas" ? "ton coach de révision" : "ton prof de poche"}. Montre-moi un cours en photo et je m'occupe du reste.` };
   if (controle && controle.jours <= 1)
     return { humeur: "reflechit", texte: controle.jours === 0 ? `C'est le jour du contrôle de ${controle.matiere}. Tu es prêt, respire un bon coup.` : `Contrôle de ${controle.matiere} demain : une dernière relecture et au lit tôt !` };
   if (doseFinie) return { humeur: "bravo", texte: choisir([`Cartes du jour bouclées${p} ! Le reste peut attendre demain.`, `Dose du jour terminée${p}. Ton cerveau te remercie.`], prenom || "x") };

@@ -12,10 +12,11 @@ import { POINTS_LANGUE, estRedactionnelle } from "./evaluation.js";
 import * as ctrl from "./controles.js";
 import { getMatieres, suggestions, ajouterMatiere, retirerMatiere, EMOJIS, COULEURS, normaliserMatiere, couleur, pastille } from "./matieres.js";
 import { ic } from "./icons.js";
-import { mascotte, bulle, reactionNote, phraseAccueil } from "./mascotte.js";
+import { mascotte, bulle, reactionNote, phraseAccueil, etapeAtlas, NOMS_ETAPES_ATLAS } from "./mascotte.js";
 import * as jeu from "./jeu.js";
 import * as dose from "./dose.js";
 import * as compte from "./compte.js";
+import { TUTEURS, tuteurActuel, nomTuteur } from "./tuteurs.js";
 import { preparerPage, changerType } from "./image.js";
 import { etatPaliers, fichesDuChapitre, SEUILS } from "./paliers.js";
 
@@ -233,7 +234,7 @@ function welcome() {
   <div class="welcome">
     <div class="welcome-masc">${mascotte("salut", 96)}</div>
     <div class="logo">Révizz</div>
-    <p class="masc-presente">Salut, moi c'est Gribouille, ton prof de poche.</p>
+    <p class="masc-presente">Salut, moi c'est ${nomTuteur()}, ${TUTEURS[tuteurActuel()].presentation}.</p>
     <p class="big">Tes fiches de cours deviennent des résumés, des flashcards, des QCM et des sujets d'entraînement.</p>
     <ul class="steps">
       <li>${ic("camera", 20)}<span>Prends en photo ta fiche ou ton cahier</span></li>
@@ -358,6 +359,15 @@ function jeuProfilHTML() {
     <div class="nv-tete">${mascotte(nv.niveau >= 5 ? "bravo" : "content", 56)}<div><p class="eyebrow">Niveau ${nv.niveau}</p><h2>${esc(nv.titre)}</h2><p class="gouttes">${goutte()} ${total} gouttes d'encre</p></div></div>
     <div class="obj-barre"><i style="width:${nv.pct}%"></i></div>
     <p class="hint">Encore ${nv.pour - nv.dans} gouttes pour le niveau ${nv.niveau + 1}.</p>
+    <h3>Mon tuteur</h3>
+    <div class="tuteurs">${["auto", "gribouille", "atlas"]
+      .map((k) => {
+        const choisi = (store.getSettings().tuteur || "auto") === k;
+        const qui = k === "auto" ? tuteurActuel({ ...store.getSettings(), tuteur: "" }) : k;
+        return `<button class="tuteur ${choisi ? "on" : ""}" data-tuteur="${k}">${mascotte("content", 46, qui)}<b>${k === "auto" ? "Selon ma classe" : TUTEURS[k].nom}</b><small>${k === "auto" ? TUTEURS[qui].nom : TUTEURS[k].pour}</small></button>`;
+      })
+      .join("")}</div>
+    ${tuteurActuel() === "atlas" ? `<p class="hint">${NOMS_ETAPES_ATLAS[etapeAtlas()]} : sa tenue évolue avec ton niveau (cape au niveau 5, aura dorée au niveau 10).</p>` : ""}
     <h3>Cartes par jour</h3>
     <div class="seg">${dose.QUOTAS.map((q) => `<button class="${(Number(store.getSettings().doseCartes) || 15) === q ? "on" : ""}" data-dose="${q}">${q} cartes</button>`).join("")}</div>
     <p class="hint">Environ ${Math.round(((Number(store.getSettings().doseCartes) || 15) * 20) / 60)} minutes par jour. +10 cartes les 3 jours avant un contrôle.</p>
@@ -1671,7 +1681,7 @@ function tabProf(f) {
   const suggestions = ["Explique-moi ce cours comme si j'avais 10 ans", "Quelles sont les 3 choses les plus importantes ?", "Donne-moi un exemple concret", "Pose-moi une question pour vérifier"];
   return `
   <div class="chat" id="chat">
-    <div class="msg-bot"><span class="avatar">${mascotte("salut", 34)}</span><div class="bubble bot">Salut ! Moi c'est Gribouille, ton prof pour « ${esc(f.titre)} ». Qu'est-ce que tu n'as pas compris ?</div></div>
+    <div class="msg-bot"><span class="avatar">${mascotte("salut", 34)}</span><div class="bubble bot">Salut ! Moi c'est ${nomTuteur()}, ton ${tuteurActuel() === "atlas" ? "coach" : "prof"} pour « ${esc(f.titre)} ». Qu'est-ce que tu n'as pas compris ?</div></div>
     ${f.chat.map((m) => (m.role === "user" ? `<div class="bubble me">${esc(m.content)}</div>` : `<div class="msg-bot"><span class="avatar">${mascotte("content", 34)}</span><div class="bubble bot md">${md(m.content)}</div></div>`)).join("")}
     <div id="live"></div>
   </div>
@@ -1739,10 +1749,12 @@ function settings() {
       ? `<div class="card parent"><h3>${ic("cle", 18)} Espace parent</h3><p class="hint">Dans l'appli Android, c'est ici que tu colles la clé API Claude et que tu choisis le modèle. Cette maquette fonctionne uniquement en mode démo.</p></div>`
       : `<div class="card parent">
     <h3>${ic("cle", 18)} Espace parent</h3>
-    <div class="seg" role="group" aria-label="Connexion à Claude">
-      <button data-cx="serveur" class="${s.connexion !== "cle" ? "on" : ""}">Code famille</button>
-      <button data-cx="cle" class="${s.connexion === "cle" ? "on" : ""}">Clé API personnelle</button>
-    </div>
+    ${
+      s.connexion === "cle"
+        ? `<div class="alerte">Cet appareil garde encore une clé API. Elle est inutile : la clé est sur le serveur. Connecte plutôt l'élève à son compte (carte « Mon compte » ci-dessus) ; la clé sera effacée de l'appareil.</div>
+           <div class="seg" role="group" aria-label="Connexion à Claude"><button data-cx="serveur">Code famille</button><button data-cx="cle" class="on">Clé API (ancienne méthode)</button></div>`
+        : `<p class="hint">L'élève se connecte avec son compte (carte « Mon compte »). Ici, le code famille sert à utiliser l'appli sans compte et à gérer les comptes.</p><span hidden><button data-cx="serveur" class="on"></button></span>`
+    }
     <div id="cx-serveur" ${s.connexion === "cle" ? "hidden" : ""}>
       <label class="field">Adresse du site Révizz
         <input id="serveur" type="url" inputmode="url" value="${esc(s.serveur || ai.adresseServeur({ ...s, serveur: "" }))}" placeholder="https://revizz.netlify.app" autocomplete="off">
@@ -1946,6 +1958,7 @@ afterRender.settings = () => {
         toast(e.message);
       }
     };
+  document.querySelectorAll("[data-tuteur]").forEach((b) => (b.onclick = () => (store.saveSettings({ tuteur: b.dataset.tuteur === "auto" ? "" : b.dataset.tuteur }), render())));
   document.querySelectorAll("[data-dose]").forEach((b) => (b.onclick = () => (store.saveSettings({ doseCartes: +b.dataset.dose }), render())));
   const $ = (id) => document.getElementById(id);
   bindSauvegarde();

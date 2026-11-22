@@ -585,3 +585,13 @@ details.aide ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 6px; 
 .diag-ligne { display: flex; gap: 10px; align-items: flex-start; }
 .diag-ligne > div { display: grid; gap: 2px; min-width: 0; } .diag-ligne small { color: var(--muted); overflow-wrap: anywhere; }
 .diag-ligne.ok svg { color: var(--good); } .diag-ligne.ko svg { color: var(--bad); }
+
+/* Atlas et choix du tuteur */
+.masc-atlas .bras { stroke: #1e3a8a; stroke-width: 8; }
+.masc-atlas.masc-salut .bras-coucou { transform-box: view-box; transform-origin: 78px 72px; }
+.masc-atlas .aura { animation: masc-aura 3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes masc-aura { 0%, 100% { opacity: .55; transform: scale(.96); } 50% { opacity: 1; transform: scale(1.03); } }
+.tuteurs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tuteur { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); font-family: inherit; color: var(--text); }
+.tuteur.on { border-color: var(--primary); background: var(--soft); }
+.tuteur b { font-size: .82rem; } .tuteur small { font-size: .7rem; color: var(--muted); text-align: center; line-height: 1.2; }

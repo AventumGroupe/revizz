@@ -25,7 +25,7 @@ async function appel(action, { corps, methode = "POST", jeton, serveur } = {}) {
 }
 
 const enregistrer = (d, serveur) =>
-  saveSettings({ connexion: "compte", jeton: d.jeton, identifiant: d.identifiant, demo: false, ...(serveur ? { serveur } : {}) });
+  saveSettings({ connexion: "compte", jeton: d.jeton, identifiant: d.identifiant, demo: false, apiKey: "", ...(serveur ? { serveur } : {}) });
 
 export const estConnecte = (s = getSettings()) => s.connexion === "compte" && !!s.jeton;
 

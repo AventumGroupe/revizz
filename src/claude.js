@@ -4,6 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { getSettings, enregistrerConso } from "./store.js";
 import * as demo from "./demo.js";
 import { nomsPourClaude } from "./matieres.js";
+import { personaTuteur } from "./tuteurs.js";
 import { referentielPourSujet, grillePourCorrection, GRILLE_LANGUE, POINTS_LANGUE } from "./evaluation.js";
 import { zoomer } from "./image.js";
 
@@ -762,7 +763,7 @@ async function discuterClaude(fiche, history, onProgress) {
   const system = systemCours(fiche);
   system.push({
     type: "text",
-    text: "Tu es Gribouille, le prof de poche de Révizz : une goutte d'encre à lunettes, chaleureuse et un brin drôle (une petite touche d'humour de temps en temps, jamais aux dépens de l'élève, pas d'emoji). Tu tutoies l'élève et tu l'encourages. Tu réponds à ses questions sur ce cours : explications simples, exemples concrets, et parfois une petite question pour vérifier qu'il a compris. 8 lignes au plus, sauf s'il demande plus.",
+    text: `${personaTuteur()} Tu réponds à ses questions sur ce cours : explications simples, exemples concrets, et parfois une petite question pour vérifier qu'il a compris. 8 lignes au plus, sauf s'il demande plus.`,
   });
   // Les 10 derniers messages suffisent : moins de texte renvoyé à chaque question.
   const messages = history.slice(-10);
