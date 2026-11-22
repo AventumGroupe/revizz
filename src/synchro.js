@@ -45,9 +45,22 @@ async function compresser(obj) {
   const flux = new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream("gzip"));
   return new Response(flux).arrayBuffer();
 }
-async function decompresser(buf) {
+async function gunzip(buf) {
   const flux = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
   return JSON.parse(await new Response(flux).text());
+}
+// Tolérant : un serveur pas encore à jour a pu garder les données en base64 (envoi par la couche réseau Android).
+async function decompresser(buf) {
+  try {
+    return await gunzip(buf);
+  } catch (e) {
+    try {
+      const texte = new TextDecoder().decode(buf).trim();
+      return await gunzip(Uint8Array.from(atob(texte), (c) => c.charCodeAt(0)));
+    } catch {
+      throw e;
+    }
+  }
 }
 
 const signature = (d) => JSON.stringify(CLES.map((k) => d[k] ?? null));
